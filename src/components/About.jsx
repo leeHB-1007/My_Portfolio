@@ -72,12 +72,10 @@ const About = () => {
       </div>
 
       <p ref={paragraphRef} className="mt-4 text-secondary text-[17px] max-w-3xl leading-[30px]">
-        I'm a skilled software developer with experience in  JavaScript, and expertise in frameworks 
-        like React, Node.js, and Three.js. I'm a quick learner and collaborate closely with clients to create efficient, 
-        scalable, and user-friendly solutions that solve real-world problems. Let's work together to bring your ideas to life!
+      저는 JavaScript, TypeScript를 기반으로 React, Node.js, Three.js, Next.js 등의 프레임워크에 전문성을 갖춘 소프트웨어 개발자입니다. 빠르게 기술을 습득하고, 클라이언트와의 긴밀한 협업을 통해 효율적이고 확장 가능한, 사용자 친화적인 솔루션을 만들어내는 것을 강점으로 삼고 있습니다. 실제 문제를 해결하는 데 초점을 맞춰, 아이디어를 현실로 구현하는 전 과정을 함께하며 가치 있는 결과를 만들어갑니다.
       </p>
 
-      <div className="mt-20 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 justify-items-center gap-10">
+<div className="mt-20 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 justify-items-center gap-10 flex-grow">
         {services.map((service, index) => (
           <ServiceCard key={service.title} index={index} {...service} />
         ))}
