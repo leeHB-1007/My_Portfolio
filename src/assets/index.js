@@ -35,6 +35,7 @@ import reactQuery from "./tech/reactQuery.png";
 import Lawmon from "./lawmon.png";
 import BookClip from "./bookclip.png";
 import HP from "./HP.png";
+import Port from "./port.png";
 
 
 export {
@@ -74,5 +75,6 @@ export {
   reactQuery,
   Lawmon,
   BookClip,
-  HP
+  HP,
+  Port
 };

@@ -36,6 +36,7 @@ import {
   Lawmon,
   BookClip,
   HP,
+  Port
 } from "../assets";
 
 // Import Tekisky separately
@@ -212,9 +213,35 @@ const testimonials = [
 ];
 
 const projects = [
-  // {
-
-  // },
+{
+    name: "HB's Portfolio",
+    description:
+      "이 프로젝트는 이현빈이라는 사람이 개발자로써 배워왔던 기술들로 다른 개발자들과 협업하여 개발한 프로젝트들을 나열하는 웹 프로젝트 입니다.",
+    tags: [
+      {
+        name: "react",
+        color: "blue-text-gradient",
+      },
+      {
+        name: "tailwind",
+        color: "white-text-gradient",
+      },
+      {
+        name: "typescript",
+        color: "pink-text-gradient",
+      },
+      {
+        name: "Tanstack-Query",
+        color: "green-text-gradient",
+      },
+      {
+        name: "zustand",
+        color: "blue-text-gradient",
+      },
+    ],
+    image: Port,
+    source_code_link: "https://github.com/LawmonProject",
+  },
   {
     name: "LAWMON",
     description:
