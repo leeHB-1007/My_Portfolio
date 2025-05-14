@@ -186,30 +186,30 @@ const experiences = [
 ];
 
 const testimonials = [
-  {
-    testimonial:
-      "I thought it was impossible to make a website as beautiful as our product, but Huzaif proved me wrong.",
-    name: "MD Mustaqeem",
-    designation: "Ecommerce",
-    company: "QuickMart",
-    image: firstTestimonial,
-  },
-  {
-    testimonial:
-      "I've never met a web developer who truly cares about their clients' success like Huzaif does.",
-    name: "Abdul Raheman",
-    designation: "Ecommerce Business",
-    company: "justbuyz",
-    image: secondTestimonial,
-  },
-  {
-    testimonial:
-      "After Huzaif optimized our website, our traffic increased by 50%. We can't thank them enough!",
-    name: "James Wang",
-    designation: "CTO",
-    company: "456 Enterprises",
-    image: thirdTestimonial,
-  },
+{
+  testimonial:
+    "처음엔 우리가 원하는 디자인을 구현하는 게 가능할까 걱정도 있었는데, 진심으로 프로젝트에 임하는 태도와 뛰어난 실력 덕분에 기대 이상으로 멋진 결과물이 나왔어요. 함께 일할 수 있어서 정말 영광이었습니다.",
+  name: "최종민",
+  designation: "백엔드 개발자",
+    company: "인천대학교",
+  image: firstTestimonial,
+},
+{
+  testimonial:
+    "협업하면서 항상 사용자 중심의 사고로 의견을 제시해주셨고, 작은 디테일까지 신경 써주셔서 정말 믿음이 갔어요. 덕분에 프로젝트가 훨씬 더 완성도 있게 마무리될 수 있었습니다.",
+  name: "김남주",
+  designation: "백엔드 개발자",
+  company: "상명대학교",
+  image: secondTestimonial,
+},
+{
+  testimonial:
+    "웹 성능 최적화부터 반응형 UI까지 모든 부분에서 기대 이상이었어요. 문제 해결 능력도 탁월해서 이슈가 생겨도 빠르게 대응해줘서 정말 든든했습니다.",
+  name: "이헌민",
+  designation: "기획자",
+  company: "넥슨 게임즈",
+  image: thirdTestimonial,
+}
 ];
 
 const projects = [
