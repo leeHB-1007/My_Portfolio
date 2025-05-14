@@ -31,6 +31,11 @@ import secondTestimonial from "./image.webp";
 import thirdTestimonial from "./third testimonial.webp";
 import inu from "./inu.png";
 import techeer from "./techeer.png";
+import reactQuery from "./tech/reactQuery.png";
+import Lawmon from "./lawmon.png";
+import BookClip from "./bookclip.png";
+import HP from "./HP.png";
+
 
 export {
   logo,
@@ -66,4 +71,8 @@ export {
   threejs,
   inu,
   techeer,
+  reactQuery,
+  Lawmon,
+  BookClip,
+  HP
 };

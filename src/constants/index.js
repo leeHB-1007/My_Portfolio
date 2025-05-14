@@ -32,6 +32,10 @@ import {
   thirdTestimonial,
   inu,
   techeer,
+  reactQuery,
+  Lawmon,
+  BookClip,
+  HP,
 } from "../assets";
 
 // Import Tekisky separately
@@ -142,10 +146,19 @@ const technologies = [
     name: "git",
     icon: git,
   },
+  {
+    name: "nextjs",
+    icon: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/nextjs/nextjs-original.svg",
+  },
+  {
+    name: "TanStack-Query",
+    icon: reactQuery,
+  },
 ];
 
 const experiences = [
-  { title: "인천대 컴퓨터공학부",
+  {
+    title: "인천대 컴퓨터공학부",
     company_name: "인천대학교",
     icon: inu,
     iconBg: "#E6DEDD",
@@ -155,7 +168,7 @@ const experiences = [
       "프로그래밍 언어, 데이터베이스, 알고리즘 등 다양한 과목을 수강하며 이론과 실습을 병행.",
       "팀 프로젝트를 통해 협업 능력과 문제 해결 능력을 향상시킴.",
     ],
-   },
+  },
   {
     title: "Techeer",
     company_name: "개발자 커뮤니티",
@@ -199,10 +212,13 @@ const testimonials = [
 ];
 
 const projects = [
+  // {
+
+  // },
   {
-    name: "Tekisky Mart",
+    name: "LAWMON",
     description:
-      "Tekisky Mart is a web-based platform that allows users to search, explore, and purchase a wide range of products from various providers, offering a seamless and efficient shopping experience.",
+      "LAWMON은 AI를 활용한 계약서 분석 및 법률 전문가와 협업하여 법률 문서를 분석하고, 사용자와 전문가와 직접적인 대화를 통해 계약 조건에 위험성을 알려주는 웹 베이스 플랫폼입니다.",
     tags: [
       {
         name: "react",
@@ -213,62 +229,70 @@ const projects = [
         color: "white-text-gradient",
       },
       {
-        name: "node",
+        name: "typescript",
         color: "pink-text-gradient",
       },
       {
-        name: "mongodb",
+        name: "Tanstack-Query",
         color: "green-text-gradient",
       },
+      {
+        name: "zustand",
+        color: "blue-text-gradient",
+      },
     ],
-    image: project2,
-    source_code_link: "https://github.com/",
+    image: Lawmon,
+    source_code_link: "https://github.com/LawmonProject",
   },
   {
-    name: "GearXpert",
+    name: "BookClip",
     description:
-      "GearXpert is your ultimate destination for premium auto parts and accessories, Whether you're an automobile enthusiast or a professional, find everything you need to upgrade, repair.",
+      "BookClip은 서점 사이트에 있는 정보를 토대로 AI를 사용하여줄거리를 쇼츠형태로 사용자에게 제공하고, 책을 읽으면서 인상 깊은 구절을 클립으로 저장하고, 다른 사용자들과 공유할 수 있는 플랫폼입니다. 사용자는 쇼츠를 통해 책의 내용을 요약하고, 다른 사용자들과 소통할 수 있는 크롬 익스텐션 서비스입니다.",
     tags: [
       {
         name: "react",
         color: "blue-text-gradient",
       },
       {
-        name: "emailJs",
+        name: "Typescript",
         color: "green-text-gradient",
       },
       {
-        name: "Gsap",
-        color: "pink-text-gradient",
-      },
-    ],
-    image: gearXpert,
-    source_code_link: "https://github.com/",
-  },
-  {
-    name: "GoGroove-Ecommerce",
-    description:
-      "Go-Groove is your ultimate destination for premium products across various categories. Whether you're a savvy shopper or a professional, enhance, and simplify your lifestyle—all in one place!",
-    tags: [
-      {
-        name: "react",
-        color: "blue-text-gradient",
-      },
-      {
-        name: "express",
+        name: "Shadcn",
         color: "white-text-gradient",
       },
       {
-        name: "node",
+        name: "pnpm",
+        color: "pink-text-gradient",
+      },
+    ],
+    image: BookClip,
+    source_code_link: "https://github.com/2024-Winter-Bootcamp-Team-A",
+  },
+  {
+    name: "3HP",
+    description:
+      "3HP는 사용자가 원하는 사진을 업로드하면, 그 사진에 딥페이크 방지 기술을 사용하여, 사용자가 원하는 사람의 얼굴로 바꿔주는 웹 베이스 플랫폼입니다. 사용자는 업로드한 사진을 통해 다양한 얼굴로 변환된 이미지를 생성할 수 있습니다.",
+    tags: [
+      {
+        name: "Nextjs",
+        color: "blue-text-gradient",
+      },
+      {
+        name: "Typescript",
+        color: "white-text-gradient",
+      },
+      {
+        name: "tailwind",
         color: "green-text-gradient",
       },
       {
-        name: "mongodb",
-        color: "green-text-gradient",
+        name: "Framer-motion",
+        color: "pink-text-gradient",
       },
     ],
-    image: project3,
-    source_code_link: "https://github.com/",
+    image: HP,
+    source_code_link: "https://github.com/leeHB-1007/3HP_INU_CAPSTONE",
   },
 ];
 

@@ -129,7 +129,7 @@ const Works = () => {
 
       <div className="w-full flex">
         <p className="mt-3 text-secondary text-[17px] max-w-3xl leading-[30px]">
-          Following projects showcase my skills and experience through real-world examples of my work. Each project is briefly described with links to code repositories and live demos. It reflects my ability to solve complex problems, work with different technologies, and manage projects effectively.
+          아래에 소개된 프로젝트들은 제가 실제로 수행한 작업을 기반으로 한 사례들로, 저의 기술력과 경험을 잘 보여줍니다. 각 프로젝트는 간략한 설명과 함께 코드 저장소 및 배포된 데모 링크를 포함하고 있어, 복잡한 문제를 해결하고 다양한 기술을 활용하며 프로젝트를 효과적으로 관리할 수 있는 저의 역량을 확인하실 수 있습니다.
         </p>
       </div>
 
