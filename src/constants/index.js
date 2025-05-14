@@ -227,7 +227,7 @@ const projects = [
         color: "white-text-gradient",
       },
       {
-        name: "typescript",
+        name: "MSW",
         color: "pink-text-gradient",
       },
       {
@@ -237,7 +237,10 @@ const projects = [
       {
         name: "zustand",
         color: "blue-text-gradient",
-      },
+      },{
+        name: "GSAP",
+        color: "green-text-gradient",
+      }
     ],
     image: Port,
     source_code_link: "https://github.com/LawmonProject",
