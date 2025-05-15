@@ -30,12 +30,12 @@ import firstTestimonial from "./Tars Ken.webp";
 import secondTestimonial from "./image.webp";
 import thirdTestimonial from "./third testimonial.webp";
 import inu from "./inu.png";
-import techeer from "./techeer.png";
+import techeer from "./Techeer.png";
 import reactQuery from "./tech/reactQuery.png";
-import Lawmon from "./lawmon.png";
-import BookClip from "./bookclip.png";
+import Lawmon from "./Lawmon.png";
+import BookClip from "./BookClip.png";
 import HP from "./HP.png";
-import Port from "./port.png";
+import Port from "./Port.png";
 
 
 export {

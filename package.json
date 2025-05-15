@@ -25,7 +25,8 @@
     "react-tilt": "^1.0.2",
     "react-vertical-timeline-component": "^3.6.0",
     "three": "^0.172.0",
-    "vanilla-tilt": "^1.8.1"
+    "vanilla-tilt": "^1.8.1",
+    "zustand": "^4.5.7"
   },
   "devDependencies": {
     "@types/react": "^18.0.27",
