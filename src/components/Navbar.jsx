@@ -44,7 +44,7 @@ const Navbar = () => {
         >
           <img src={logo} alt='logo' className='w-9 h-9 object-contain' />
           <p className='text-white text-[18px] font-bold cursor-pointer flex '>
-            이현빈이오 &nbsp;
+            이현빈 &nbsp;
             <span className='sm:block hidden'> | FrontDev</span>
           </p>
         </Link>
