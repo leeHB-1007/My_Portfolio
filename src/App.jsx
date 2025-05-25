@@ -13,8 +13,9 @@ const Tech = lazy(() => import('./components/Tech'));
 const Works = lazy(() => import('./components/Works'));
 const Feedbacks = lazy(() => import('./components/Feedbacks'));
 const Contact = lazy(() => import('./components/Contact'));
-const StarsCanvas = lazy(() => import('./components/canvas/Stars')); // StarsCanvas 경로 확인 필요
+const StarsCanvas = lazy(() => import('./components/canvas/Stars'));
 const Footer = lazy(() => import('./components/Footer'));
+const WeatherWidget = lazy(() => import('./components/WeatherWidget')); 
 
 // 로딩 중 표시할 간단한 fallback 컴포넌트
 const LoadingFallback = () => <div style={{ textAlign: 'center', padding: '50px', color: 'white' }}>Loading...</div>;
@@ -25,6 +26,7 @@ const App = () => {
     <BrowserRouter>
       <Suspense fallback={<LoadingFallback />}> {/* 전체를 Suspense로 감싸거나, 각 lazy 컴포넌트 그룹별로 감쌀 수 있음 */}
         <div className='relative z-0 bg-primary'>
+            <WeatherWidget />
           <div className='bg-hero-pattern bg-cover bg-no-repeat bg-center relative'>
             <Navbar />
             <Hero />
