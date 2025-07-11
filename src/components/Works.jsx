@@ -11,6 +11,26 @@ import { SectionWrapper } from "../hoc";
 // Register ScrollTrigger plugin
 gsap.registerPlugin(ScrollTrigger);
 
+const useGsap = (elementRef, animation, delay = 0) => {
+  useEffect(() => {
+    if (elementRef.current) {
+      gsap.fromTo(
+        elementRef.current,
+        animation.from,
+        {
+          ...animation.to,
+          delay,
+          scrollTrigger: {
+            trigger: elementRef.current,
+            start: "top 85%",
+            toggleActions: "play none none reverse",
+          },
+        }
+      );
+    }
+  }, [elementRef, animation, delay]);
+};
+
 const ProjectCard = ({
   index,
   name,
@@ -46,7 +66,7 @@ const ProjectCard = ({
   }, []);
 
   return (
-    <div ref={cardRef}>
+    <div ref={cardRef} className="project-card">
       <Tilt
         options={{
           max: 45,
@@ -101,6 +121,8 @@ const Works = () => {
     const [loading, setLoading] = useState(true); // 로딩 상태
     const [error, setError] = useState(null); // 에러 상태
     const worksContainerRef = useRef(null); // works-container div에 대한 ref
+    const headingRef = useRef(null);
+    const paragraphRef = useRef(null);
 
     // 데이터 가져오기 함수 (useCallback으로 감싸서 불필요한 재생성 방지 가능)
     const fetchProjects = React.useCallback(async () => {
@@ -149,14 +171,25 @@ const Works = () => {
     );
   }, []);
 
+    // 제목 애니메이션
+    useGsap(headingRef, {
+      from: { opacity: 0, x: -50 },
+      to: { opacity: 1, x: 0, duration: 1, ease: "power2.out" },
+    });
+    // 설명 애니메이션
+    useGsap(paragraphRef, {
+      from: { opacity: 0, y: 50 },
+      to: { opacity: 1, y: 0, duration: 1, ease: "power3.out" },
+    }, 0.3);
+
   return (
     <>
-      <div>
+      <div ref={headingRef}>
         <p className={`${styles.sectionSubText}`}>My work</p>
         <h2 className={`${styles.sectionHeadText}`}>Projects.</h2>
       </div>
 
-      <div className="w-full flex">
+      <div className="w-full flex" ref={paragraphRef}>
         <p className="mt-3 text-secondary text-[17px] max-w-3xl leading-[30px]">
           아래에 소개된 프로젝트들은 제가 실제로 수행한 작업을 기반으로 한
           사례들로, 저의 기술력과 경험을 잘 보여줍니다. 각 프로젝트는 간략한
