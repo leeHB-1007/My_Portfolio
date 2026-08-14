@@ -1,59 +1,60 @@
 import React from "react";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 
 import { styles } from "../styles";
 import { SectionWrapper } from "../hoc";
 import { fadeIn, textVariant } from "../utils/motion";
-import { testimonials } from "../constants";
+import { workPrinciples } from "../constants";
 
-const FeedbackCard = ({ index, testimonial, name, designation, company, image }) => (
+const StrengthCard = ({ index, title, description, prefersReducedMotion }) => (
   <motion.div
-    variants={fadeIn("", "spring", index * 0.5, 0.75)}
-    className='bg-black-200 p-10 rounded-3xl xs:w-[320px] w-full'
+    variants={
+      prefersReducedMotion ? undefined : fadeIn("", "spring", index * 0.15, 0.7)
+    }
+    className="h-full rounded-3xl bg-black-200 p-8"
   >
-    <p className='text-white font-black text-[48px]'>"</p>
-
-    <div className='mt-1'>
-      <p className='text-white tracking-wider text-[18px]'>{testimonial}</p>
-
-      <div className='mt-7 flex justify-between items-center gap-1'>
-        <div className='flex-1 flex flex-col'>
-          <p className='text-white font-medium text-[16px]'>
-            <span className='blue-text-gradient'>@</span> {name}
-          </p>
-          <p className='mt-1 text-secondary text-[12px]'>
-            {designation} of {company}
-          </p>
-        </div>
-
-        <img
-          src={image}
-          alt={`feedback_by-${name}`}
-          className='w-10 h-10 rounded-full object-cover'
-        />
+    <div className="flex items-center gap-4">
+      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#915EFF]/20 text-[15px] font-semibold text-[#b9b1f5]">
+        0{index + 1}
       </div>
+      <h3 className="text-[20px] font-bold leading-tight text-white">{title}</h3>
     </div>
+    <p className="mt-6 text-[15px] leading-7 tracking-wide text-secondary">
+      {description}
+    </p>
   </motion.div>
 );
 
 const Feedbacks = () => {
+  const prefersReducedMotion = useReducedMotion();
+
   return (
-    <div className={`mt-12 bg-black-100 rounded-[20px]`}>
-      <div
-        className={`bg-tertiary rounded-2xl ${styles.padding} min-h-[300px]`}
-      >
-        <motion.div variants={textVariant()}>
-          <p className={styles.sectionSubText}>What others say</p>
-          <h2 className={styles.sectionHeadText}>Testimonials.</h2>
+    <div className="mt-12 rounded-[20px] bg-black-100">
+      <div className={`min-h-[260px] rounded-2xl bg-tertiary ${styles.padding}`}>
+        <motion.div variants={prefersReducedMotion ? undefined : textVariant()}>
+          <p className={styles.sectionSubText}>How I work</p>
+          <h2 className={styles.sectionHeadText}>Strengths.</h2>
         </motion.div>
+        <p className="mt-6 max-w-3xl text-[17px] leading-8 text-secondary">
+          협업 방식과 전달 기준을 포트폴리오 전반에 걸쳐 일관되게 보여주는
+          항목만 정리했습니다.
+        </p>
       </div>
-      <div className={`-mt-20 pb-14 ${styles.paddingX} flex flex-wrap justify-center gap-7`}>
-        {testimonials.map((testimonial, index) => (
-          <FeedbackCard key={testimonial.name} index={index} {...testimonial} />
+
+      <div
+        className={`-mt-12 grid auto-rows-fr grid-cols-1 gap-7 pb-14 md:grid-cols-2 xl:grid-cols-3 ${styles.paddingX}`}
+      >
+        {workPrinciples.map((principle, index) => (
+          <StrengthCard
+            key={principle.title}
+            index={index}
+            prefersReducedMotion={prefersReducedMotion}
+            {...principle}
+          />
         ))}
       </div>
     </div>
   );
 };
 
-export default SectionWrapper(Feedbacks, "");
+export default SectionWrapper(Feedbacks, "strengths");

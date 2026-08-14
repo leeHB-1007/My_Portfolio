@@ -25,6 +25,7 @@ import nodejs from "./tech/nodejs.png";
 import reactjs from "./tech/reactjs.png";
 import redux from "./tech/redux.png";
 import tailwind from "./tech/tailwind.png";
+import typescript from "./tech/typescript.png";
 import threejs from "./tech/threejs.svg";
 import firstTestimonial from "./Tars Ken.webp";
 import secondTestimonial from "./image.webp";
@@ -36,6 +37,7 @@ import Lawmon from "./Lawmon.png";
 import BookClip from "./BookClip.png";
 import HP from "./HP.png";
 import Port from "./Port.png";
+import herobg from "./herobg.png";
 
 
 export {
@@ -69,6 +71,7 @@ export {
   reactjs,
   redux,
   tailwind,
+  typescript,
   threejs,
   inu,
   techeer,
@@ -76,5 +79,6 @@ export {
   Lawmon,
   BookClip,
   HP,
-  Port
+  Port,
+  herobg,
 };
