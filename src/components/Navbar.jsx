@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { styles } from "../styles";
 import { navLinks, profile } from "../constants";
 import { logo, menu, close } from "../assets";
+import { rig } from "../scroll/scrollRig";
 
 const Navbar = () => {
   const [active, setActive] = useState("");
@@ -11,12 +12,11 @@ const Navbar = () => {
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
-    const handleScroll = () => {
-      setScrolled(window.scrollY > 64);
-    };
+    // 스크롤 리스너는 scrollRig 하나로 통합한다. pinned에서는 인트로가 끝날 때 배경을 켠다.
+    const sync = (state) => setScrolled(state.navScrolled);
 
-    window.addEventListener("scroll", handleScroll);
-    return () => window.removeEventListener("scroll", handleScroll);
+    sync(rig);
+    return rig.subscribe(sync);
   }, []);
 
   const handleNavClick = (title) => {

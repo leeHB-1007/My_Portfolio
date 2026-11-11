@@ -46,6 +46,158 @@ textarea {
   color: #ffffff;
 }
 
+/* 100lvh: iOS 주소창이 변해도 높이가 고정되어 canvas 버퍼를 다시 만들지 않는다. */
+.galaxy-layer {
+  height: 100vh;
+  height: 100lvh;
+}
+
+.galaxy-veil {
+  position: absolute;
+  inset: 0;
+  background: #050816;
+  opacity: var(--veil, 0);
+}
+
+/*
+ * Hero 인트로. 레이아웃 모드(pinned/flow/reduced)는 아래 미디어쿼리만으로 정한다.
+ * scrollRig는 stage의 position을 읽기만 한다. 임계값(860/700/559)은 이 파일에만 둔다.
+ */
+.hero-track {
+  position: relative;
+  height: 220vh;
+}
+
+@media (max-width: 640px) {
+  .hero-track {
+    height: 160vh;
+  }
+}
+
+.hero-stage {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  height: 100svh;
+  overflow: hidden;
+  overflow: clip;
+  display: flex;
+  flex-direction: column;
+  /* 세로 가운데 정렬은 웹폰트 로드 때 텍스트 열 전체가 밀려 CLS가 커진다(실측 0.18). 위에서부터 배치한다. */
+  justify-content: flex-start;
+  padding-top: clamp(104px, 18vh, 200px);
+  padding-bottom: 120px;
+}
+
+/* 좁은 화면: 텍스트 열을 덮는 상→하 스크림(은하가 내려가 있는 하단은 투명). */
+.hero-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 15;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.85) 0%,
+    rgba(0, 0, 0, 0.6) 55%,
+    rgba(0, 0, 0, 0) 85%
+  );
+}
+
+@media (min-width: 1024px) {
+  .hero-scrim {
+    background: linear-gradient(
+      to right,
+      rgba(0, 0, 0, 0.85) 0%,
+      rgba(0, 0, 0, 0.45) 50%,
+      rgba(0, 0, 0, 0) 100%
+    );
+  }
+}
+
+.hero-indicator-dot {
+  animation: hero-indicator-bounce 1.5s ease-in-out infinite;
+}
+
+@keyframes hero-indicator-bounce {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(24px);
+  }
+}
+
+/* pinned 전용: 페이드와 압축 규칙 */
+@media (min-height: 560px) and (prefers-reduced-motion: no-preference) {
+  .hero-fade {
+    opacity: clamp(0, calc(1 - (var(--hero-p, 0) - 0.1) / 0.3), 1);
+    transform: translateY(calc(var(--hero-p, 0) * -80px));
+  }
+
+  /* 스크림은 위치가 바뀌면 하단에 틈이 생기므로 투명도만 따라간다. */
+  .hero-scrim {
+    opacity: clamp(0, calc(1 - (var(--hero-p, 0) - 0.1) / 0.3), 1);
+  }
+
+  /* 투명해진 링크가 클릭을 가로채지 않게 한다. */
+  .hero-stage[data-hero-faded] .hero-fade {
+    pointer-events: none;
+  }
+}
+
+@media (min-height: 560px) and (max-width: 640px) and (prefers-reduced-motion: no-preference),
+  (min-height: 560px) and (max-height: 860px) and (prefers-reduced-motion: no-preference) {
+  .hero-summary {
+    display: none;
+  }
+}
+
+@media (min-height: 560px) and (max-height: 700px) and (prefers-reduced-motion: no-preference) {
+  .hero-chips,
+  .hero-indicator {
+    display: none;
+  }
+
+  .hero-stage {
+    padding-bottom: 32px;
+  }
+}
+
+/* flow: 화면이 낮아 고정하면 내용이 잘리는 경우 */
+@media (max-height: 559px) {
+  .hero-track {
+    height: auto;
+  }
+
+  .hero-stage {
+    position: relative;
+    height: auto;
+    min-height: 100vh;
+    min-height: 100svh;
+    overflow: visible;
+  }
+}
+
+/* reduced: flow와 같은 배치, 페이드 없음(flow보다 뒤에 선언) */
+@media (prefers-reduced-motion: reduce) {
+  .hero-track {
+    height: auto;
+  }
+
+  .hero-stage {
+    position: relative;
+    height: auto;
+    min-height: 100vh;
+    min-height: 100svh;
+    overflow: visible;
+  }
+
+  .motion-toggle {
+    display: none;
+  }
+}
+
 .hash-span {
   display: block;
   margin-top: -100px;

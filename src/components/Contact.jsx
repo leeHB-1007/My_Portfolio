@@ -5,6 +5,7 @@ import useContactStore from "../store/contractStore";
 import { styles } from "../styles";
 import { profileLinks } from "../constants";
 import { EarthCanvas } from "./canvas";
+import CanvasErrorBoundary from "./CanvasErrorBoundary";
 import { SectionWrapper } from "../hoc";
 import { slideIn } from "../utils/motion";
 
@@ -153,7 +154,9 @@ const Contact = () => {
         className="relative min-h-[320px] xl:flex-1 xl:h-auto"
       >
         <div className="absolute inset-0 z-0">
-          <EarthCanvas />
+          <CanvasErrorBoundary fallback={<div className="h-full w-full" />}>
+            <EarthCanvas />
+          </CanvasErrorBoundary>
         </div>
       </motion.div>
     </div>
