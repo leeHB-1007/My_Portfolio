@@ -368,3 +368,745 @@ textarea {
     transition-duration: 0.01ms !important;
   }
 }
+
+
+/*
+ * 은하 항해. App이 JOURNEY_QUERY(min-height 600px, 모션 허용)와 3D 사용 가능 여부로 이 트리를 고른다.
+ * 트랙은 Hero 트랙의 마지막 한 화면과 겹쳐, 인트로가 끝나는 순간 스테이지가 고정된다.
+ * 스테이지는 그 전부터 Hero 위로 올라오므로 투명하고 포인터를 받지 않는다.
+ */
+.journey-track {
+  position: relative;
+  margin-top: -100vh;
+  margin-top: -100svh;
+  height: calc((var(--journey-units) + 1) * 100vh);
+  height: calc((var(--journey-units) + 1) * 100svh);
+}
+
+.journey-anchor {
+  position: absolute;
+  left: 0;
+  width: 1px;
+  height: 0;
+  top: calc(var(--at) * 100vh);
+  top: calc(var(--at) * 100svh);
+}
+
+.journey-stage {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  height: 100svh;
+  overflow: hidden;
+  overflow: clip;
+  pointer-events: none;
+}
+
+.journey-dots {
+  position: absolute;
+  z-index: 5;
+  top: 110px;
+  right: 24px;
+  pointer-events: auto;
+  opacity: var(--hud, 0);
+}
+
+.journey-dots ol {
+  display: flex;
+  gap: 12px;
+  list-style: none;
+}
+
+.journey-stage:not([data-journey-on]) .journey-dots,
+.journey-stage:not([data-journey-on]) .journey-labels,
+.journey-stage:not([data-journey-on]) .journey-planet-tag {
+  visibility: hidden;
+}
+
+.journey-dot {
+  position: relative;
+  display: block;
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  background: rgba(170, 166, 195, 0.35);
+}
+
+/* 터치 대상은 넓게(26px) */
+.journey-dot::after {
+  content: "";
+  position: absolute;
+  inset: -8px;
+}
+
+.journey-dot:hover {
+  background: #f272c8;
+}
+
+.journey-dot[aria-current] {
+  background: #915eff;
+  box-shadow:
+    0 0 0 4px rgba(145, 94, 255, 0.25),
+    0 0 14px rgba(145, 94, 255, 0.8);
+}
+
+/*
+ * 위성 라벨: li의 transform(위성의 화면 좌표)과 --a(행성 앞 1, 뒤 0.35)는 PlanetSystem이 쓴다.
+ * 앞 자리(현재) 위성의 라벨은 강조하고 나머지는 0.6.
+ */
+.journey-labels {
+  position: absolute;
+  inset: 0;
+  opacity: var(--lk, 0);
+}
+
+.journey-label-list {
+  list-style: none;
+}
+
+.journey-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  opacity: var(--a, 0);
+}
+
+.journey-label-button {
+  position: absolute;
+  left: 0;
+  top: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: max-content;
+  max-width: 200px;
+  padding: 4px 9px 5px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  background: rgba(5, 8, 22, 0.62);
+  color: #ffffff;
+  text-align: center;
+  opacity: 0.85;
+  transform: translateX(calc(-50% + var(--dx, 0px)));
+  pointer-events: auto;
+  transition:
+    border-color 0.2s ease,
+    background-color 0.2s ease,
+    opacity 0.2s ease;
+}
+
+/* 라벨이 거의 보이지 않는 이동 구간(--lk < 0.5)에는 클릭을 받지 않는다. */
+.journey-stage:not([data-labels-on]) .journey-label-button {
+  pointer-events: none;
+}
+
+.journey-label-button:hover,
+.journey-label-button:focus-visible {
+  opacity: 1;
+  border-color: rgba(145, 94, 255, 0.7);
+}
+
+.journey-label-button[aria-current] {
+  opacity: 1;
+  padding: 5px 11px 6px;
+  border-color: #915eff;
+  background: rgba(21, 16, 48, 0.9);
+  box-shadow: 0 0 18px rgba(145, 94, 255, 0.5);
+}
+
+.journey-label-title {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+}
+
+.journey-label-button[aria-current] .journey-label-title {
+  font-size: 13px;
+  line-height: 17px;
+}
+
+.journey-label-sub {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 11px;
+  line-height: 15px;
+  color: #aaa6c3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 앞 위성 → 카드 가장자리 연결선. PlanetSystem이 transform(위치·각도·길이)을 쓴다. */
+.journey-connector {
+  position: absolute;
+  left: 0;
+  top: -0.5px;
+  width: 1px;
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    rgba(255, 255, 255, 0.9),
+    rgba(145, 94, 255, 0.6)
+  );
+  opacity: calc(var(--ck, 0) * 0.75);
+  transform-origin: 0 50%;
+}
+
+/* 행성 이름표: PlanetSystem이 transform(행성 아래 가장자리)과 --r(화면상 반지름)을 쓴다. */
+.journey-planet-tag {
+  position: absolute;
+  left: 0;
+  top: 0;
+  opacity: var(--lk, 0);
+}
+
+.journey-planet-tag span {
+  position: absolute;
+  left: 0;
+  top: 8px;
+  padding: 2px 10px;
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  text-shadow: 0 0 14px rgba(145, 94, 255, 0.85);
+  transform: translateX(-50%);
+}
+
+/*
+ * 챕터 패널: 챕터마다 1개. 도착·위성 단계 내내 유지되고(--k), 안의 본문만 교차 페이드한다.
+ * 본문들은 같은 격자 칸에 겹쳐 패널 크기가 항목마다 출렁이지 않는다(내부 스크롤 없음).
+ * 좁은 화면(768px 미만)은 위쪽이 행성·고리 전용이고 패널은 그 아래(--panel-top-narrow)에
+ * 위쪽 정렬한다(하단 여백은 MotionToggle 자리). 위치 상수는 JOURNEY_VIEWS와 같다.
+ */
+.journey-panels {
+  position: absolute;
+  top: calc(var(--panel-top-narrow, 0.4) * 100vh);
+  top: calc(var(--panel-top-narrow, 0.4) * 100svh);
+  bottom: 64px;
+  left: 16px;
+  right: 16px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  justify-items: center;
+}
+
+/* 긴 목차·제목이 패널 폭을 밀어내지 않게 격자·flex 자식의 최소 폭을 0으로 둔다. */
+.journey-panel,
+.journey-panel-frame,
+.journey-panel-body,
+.journey-panel-content,
+.journey-panel-content > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.journey-panel-title,
+.journey-panel-desc,
+.journey-panel-content {
+  overflow-wrap: anywhere;
+}
+
+.journey-panel {
+  grid-area: 1 / 1;
+  width: 100%;
+  max-width: 580px;
+  opacity: var(--k, 0);
+  transform: translate3d(0, calc((1 - var(--k, 0)) * 16px), 0);
+}
+
+.journey-panel[data-active] {
+  pointer-events: auto;
+}
+
+.journey-panel-frame {
+  background: linear-gradient(
+    135deg,
+    rgba(145, 94, 255, 0.7),
+    rgba(255, 255, 255, 0.08) 45%,
+    rgba(242, 114, 200, 0.55)
+  );
+}
+
+.journey-panel-body {
+  padding: 24px 28px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.journey-panel-sub {
+  font-size: 12px;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+}
+
+.journey-panel-title {
+  margin-top: 2px;
+  font-size: 34px;
+  line-height: 1.1;
+}
+
+.journey-panel-desc {
+  margin-top: 8px;
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.journey-toc {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-width: 100%;
+  margin-top: 14px;
+  list-style: none;
+}
+
+.journey-toc-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 4px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #aaa6c3;
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.journey-toc-number {
+  color: #b9b1f5;
+  font-weight: 600;
+}
+
+/* 두 칸씩 접히도록 항목 폭을 절반 이하로 */
+.journey-toc li {
+  min-width: 0;
+  max-width: calc(50% - 3px);
+}
+
+.journey-toc-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.journey-toc-button[data-passed] {
+  color: #f3f3f3;
+}
+
+.journey-toc-button:hover {
+  border-color: rgba(145, 94, 255, 0.6);
+  color: #ffffff;
+}
+
+.journey-toc-button[aria-current] {
+  border-color: #915eff;
+  background: rgba(145, 94, 255, 0.18);
+  color: #ffffff;
+}
+
+.journey-panel-content {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.journey-panel-content > * {
+  grid-area: 1 / 1;
+  /* 패널의 --k가 상속되면 본문이 전부 보이므로 기본값을 끊는다(rig가 인라인으로 덮어쓴다). */
+  --k: 0;
+  opacity: var(--k, 0);
+  transform: translate3d(0, calc((1 - var(--k, 0)) * 10px), 0);
+}
+
+.journey-hint {
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.journey-title {
+  font-size: 22px;
+}
+
+.journey-text {
+  font-size: 15px;
+  line-height: 26px;
+}
+
+.journey-subtitle {
+  font-size: 15px;
+  line-height: 24px;
+}
+
+.journey-tags {
+  font-size: 13px;
+}
+
+.journey-bullet {
+  width: 8px;
+  height: 8px;
+  margin-top: 9px;
+}
+
+.journey-block {
+  padding: 16px 18px;
+}
+
+.journey-icon,
+.journey-icon-circle {
+  width: 56px;
+  height: 56px;
+}
+
+.journey-project-image {
+  height: 168px;
+}
+
+.journey-tech-grid {
+  gap: 10px;
+}
+
+.journey-tech-grid li {
+  padding: 12px 6px;
+}
+
+.journey-tech-icon {
+  width: 36px;
+  height: 36px;
+}
+
+/* 좁은 화면(768px 미만): 현재 위성 라벨만(제목 1줄), 이름표는 행성 위, 목차는 한 줄 가로 스크롤 */
+@media (max-width: 767px) {
+  .journey-label:not([data-current]) {
+    display: none;
+  }
+
+  .journey-label-button {
+    max-width: 140px;
+  }
+
+  .journey-label-title,
+  .journey-label-button[aria-current] .journey-label-title {
+    -webkit-line-clamp: 1;
+  }
+
+  .journey-label-sub {
+    display: none;
+  }
+
+  /* 앞 위성이 행성 바로 아래에 오므로 이름표는 행성 왼쪽 옆에 둔다. */
+  .journey-planet-tag span {
+    top: calc(-1 * var(--r, 0px));
+    left: calc(-1 * var(--r, 0px) - 10px);
+    transform: translate(-100%, -50%);
+  }
+
+  .journey-toc {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .journey-toc::-webkit-scrollbar {
+    display: none;
+  }
+
+  .journey-toc li {
+    flex-shrink: 0;
+    max-width: 200px;
+  }
+}
+
+/* 768px 이상: 행성 왼쪽, 패널 오른쪽 세로 가운데 */
+@media (min-width: 768px) {
+  .journey-dots {
+    top: 50%;
+    right: 24px;
+    transform: translateY(-50%);
+  }
+
+  .journey-dots ol {
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .journey-label-button {
+    max-width: 140px;
+  }
+
+  .journey-panels {
+    top: 104px;
+    bottom: 32px;
+    left: calc(var(--panel-left-mid, 0.5) * 100%);
+    right: 56px;
+    align-items: center;
+    justify-items: start;
+  }
+
+  .journey-panel {
+    transform: translate3d(calc((1 - var(--k, 0)) * 24px), 0, 0);
+  }
+}
+
+/* 넓은 화면: 행성 가로 30%, 패널은 오른쪽(가로 54~92%) */
+@media (min-width: 1024px) {
+  .journey-dots {
+    right: 36px;
+  }
+
+  .journey-label-button {
+    max-width: 160px;
+  }
+
+  .journey-panels {
+    left: calc(var(--panel-left-wide, 0.54) * 100%);
+    right: 8%;
+  }
+}
+
+/* 낮은 화면 압축(내용은 줄이지 않고 이미지·여백·글자 크기만 줄인다) */
+@media (max-height: 960px) {
+  .journey-project-image {
+    height: 112px;
+  }
+}
+
+/* 좁은 화면은 패널 영역이 낮으므로 이미지를 숨기고 촘촘하게 */
+@media (max-height: 760px), (max-width: 1023px) {
+  .journey-project-image {
+    display: none;
+  }
+
+  .journey-panel-body {
+    padding: 16px 20px;
+  }
+
+  .journey-panel-title {
+    font-size: 26px;
+  }
+
+  .journey-panel-desc {
+    margin-top: 4px;
+    font-size: 13px;
+    line-height: 19px;
+  }
+
+  .journey-toc {
+    margin-top: 10px;
+  }
+
+  .journey-panel-content {
+    margin-top: 12px;
+    padding-top: 12px;
+  }
+
+  .journey-title {
+    font-size: 19px;
+  }
+
+  .journey-text {
+    font-size: 14px;
+    line-height: 22px;
+  }
+
+  .journey-bullet {
+    margin-top: 7px;
+  }
+
+  .journey-block {
+    margin-top: 12px;
+    padding: 10px 14px;
+  }
+
+  .journey-list {
+    margin-top: 8px;
+  }
+
+  .journey-icon,
+  .journey-icon-circle {
+    width: 40px;
+    height: 40px;
+  }
+
+  .journey-tech-grid {
+    margin-top: 12px;
+    gap: 6px;
+  }
+
+  /* 기술 그리드: 아이콘과 이름을 한 줄로 */
+  .journey-tech-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .journey-tech-grid li {
+    flex-direction: row;
+    gap: 8px;
+    padding: 5px 8px;
+    text-align: left;
+  }
+
+  .journey-tech-grid li span {
+    margin-top: 0;
+  }
+
+  .journey-tech-icon {
+    width: 20px;
+    height: 20px;
+  }
+}
+
+@media (max-width: 639px) {
+  .journey-panel-body {
+    padding: 14px 16px;
+  }
+
+  .journey-panel-title {
+    font-size: 22px;
+  }
+
+
+  .journey-text {
+    font-size: 13px;
+    line-height: 20px;
+  }
+
+  .journey-subtitle {
+    font-size: 14px;
+    line-height: 20px;
+  }
+}
+
+/*
+ * 낮은 화면(높이 700px 이하, 1024px 미만): 패널 머리를 한 줄(제목 + 소제목)로,
+ * 설명은 한 줄 말줄임으로 줄인다(전체 문장은 title 속성).
+ */
+@media (max-width: 1023px) and (max-height: 700px) {
+  .journey-panel-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    column-gap: 10px;
+  }
+
+  .journey-panel-title {
+    order: -1;
+    font-size: 22px;
+  }
+
+  .journey-panel-sub {
+    font-size: 11px;
+  }
+
+  .journey-panel-desc {
+    flex-basis: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .journey-text {
+    font-size: 13px;
+    line-height: 19px;
+  }
+
+  .journey-block {
+    margin-top: 8px;
+    padding: 6px 12px;
+  }
+
+  .journey-list {
+    margin-top: 4px;
+  }
+
+  .journey-tech-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  /* 본문 안 간격을 줄인다(Tailwind 여백 클래스보다 우선하도록 article 아래로 한정). */
+  .journey-panel-content article .journey-list {
+    margin-top: 6px;
+  }
+
+  .journey-panel-content article .journey-list > :not([hidden]) ~ :not([hidden]) {
+    margin-top: 4px;
+  }
+
+  .journey-panel-content article > .mt-4,
+  .journey-panel-content article > .mt-5 {
+    margin-top: 8px;
+  }
+
+  .journey-panel-content article > .mt-2 {
+    margin-top: 4px;
+  }
+
+  .journey-panel-body {
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+
+  .journey-toc {
+    margin-top: 6px;
+  }
+
+  .journey-toc-button {
+    padding: 2px 8px;
+    font-size: 11px;
+  }
+
+  .journey-panel-content {
+    margin-top: 6px;
+    padding-top: 6px;
+  }
+
+  .journey-tech-grid {
+    gap: 4px;
+  }
+
+  .journey-tech-grid li {
+    gap: 6px;
+    padding: 3px 6px;
+  }
+
+  .journey-tech-grid li span {
+    font-size: 11px;
+    line-height: 14px;
+  }
+
+  .journey-tech-icon {
+    width: 16px;
+    height: 16px;
+  }
+
+  /* 프로젝트 본문: 장식용 "Case Study" 머리표를 숨기고 태그를 한 줄로 */
+  .journey-case-kicker {
+    display: none;
+  }
+
+  .journey-panel-content article > .journey-case-kicker + .mt-2 {
+    margin-top: 0;
+  }
+
+  .journey-tags {
+    column-gap: 8px;
+    font-size: 12px;
+  }
+
+  .journey-subtitle {
+    font-size: 13px;
+    line-height: 18px;
+  }
+}

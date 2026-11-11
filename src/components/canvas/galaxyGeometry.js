@@ -1,7 +1,9 @@
+import { GALAXY_ARMS, SPIN } from "./galaxyShape";
+
 export const GALAXY_RADIUS = 5;
 // 가장 높은 티어의 입자 수
 export const GALAXY_MAX_COUNT = 45000;
-export const GALAXY_ARMS = 4;
+export { GALAXY_ARMS } from "./galaxyShape";
 export const DUST_COUNT = 2000;
 export const DUST_MIN_RADIUS = 60;
 export const DUST_MAX_RADIUS = 110;
@@ -14,7 +16,6 @@ export const GALAXY_COLORS = {
 
 // Float32 저장 시 반올림으로 5를 넘지 않도록 약간 안쪽에서 자른다.
 const RADIUS_CAP = GALAXY_RADIUS - 0.005;
-const SPIN = 1.1;
 const SPREAD = 0.45;
 
 export const createRng = (seed = 1) => {

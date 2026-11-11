@@ -1,3 +1,5 @@
+import { JOURNEY_CAMERA, lerpPose, sampleJourneyPose } from "./journeyPose";
+
 const DEG = Math.PI / 180;
 
 export const DRIFT_VEIL = 0.8;
@@ -26,6 +28,9 @@ export const POSE_KEYS = [
   "veil",
   "viewShiftX",
   "viewShiftY",
+  "tx",
+  "ty",
+  "tz",
 ];
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
@@ -38,6 +43,7 @@ const finite = (value, fallback = 0) =>
 export const computeFit = (aspect) =>
   aspect > 0 && Number.isFinite(aspect) ? clamp(1 / aspect, 1, 2.2) : 1;
 
+// target(tx, ty, tz): 카메라가 바라보는 점. 인트로·드리프트는 원점.
 // wide: 폭 1024px 이상(CSS 미디어쿼리 기준). 넓으면 오른쪽, 좁으면 아래로 치우친다.
 const viewShift = (heroP, wide) => {
   const k = 1 - smoothstep(clamp(heroP / VIEW_SHIFT_END, 0, 1));
@@ -54,6 +60,9 @@ const pose = (fit, radius, azimuth, elevation, dim, veil, shift) => ({
   veil,
   viewShiftX: shift.x,
   viewShiftY: shift.y,
+  tx: 0,
+  ty: 0,
+  tz: 0,
 });
 
 const NO_SHIFT = { x: 0, y: 0 };
@@ -67,6 +76,11 @@ export const samplePose = ({
   aspect,
   mode,
   wide,
+  journey = null,
+  time = 0,
+  // 항해 전용: 화면 구성(wide|mid|narrow)과 방위각 정규화 시각(journeyPose 참고)
+  view = wide ? "wide" : "narrow",
+  shiftTime = time,
 }) => {
   const fit = computeFit(aspect);
 
@@ -102,6 +116,10 @@ export const samplePose = ({
       0,
       viewShift(heroP, wide)
     );
+  }
+
+  if (journey && mode === "pinned") {
+    return sampleAfterIntro({ y, end, screen, last, fit, view, journey, time, shiftTime });
   }
 
   // 인트로 이후 남은 거리. 짧은 문서에서는 후퇴·마무리를 같은 비율로 줄인다.
@@ -149,4 +167,53 @@ export const samplePose = ({
     DRIFT_VEIL,
     NO_SHIFT
   );
+};
+
+// 항해 모드의 인트로 이후: 인트로 끝 → 행성 항해 → Contact 쪽 마무리.
+// journey: { start, end, layout, planets } (start·end는 스테이지가 고정되는 스크롤 범위)
+const sampleAfterIntro = ({ y, end, screen, last, fit, view, journey, time, shiftTime }) => {
+  const from = pose(
+    fit,
+    RADIUS.introEnd,
+    AZIMUTH.introEnd,
+    ELEVATION.introEnd,
+    1,
+    0,
+    NO_SHIFT
+  );
+  const journeyStart = Math.max(finite(journey.start), end);
+  const journeyEnd = Math.max(finite(journey.end), journeyStart);
+  const span = journeyEnd - journeyStart;
+  const total = journey.layout.total;
+  const u =
+    y <= journeyStart
+      ? 0
+      : span > 0
+        ? ((Math.min(y, journeyEnd) - journeyStart) / span) * total
+        : total;
+  const current = sampleJourneyPose({
+    distance: u,
+    layout: journey.layout,
+    planets: journey.planets,
+    time: finite(time),
+    shiftTime: finite(shiftTime),
+    fit,
+    view,
+    from,
+    minAzimuth: AZIMUTH.introEnd + JOURNEY_CAMERA.firstAfter,
+  });
+  if (y <= journeyEnd) return current;
+
+  const outro = Math.min(screen, last - journeyEnd);
+  const e = outro > 0 ? smoothstep(clamp((y - journeyEnd) / outro, 0, 1)) : 1;
+  const finish = pose(
+    fit,
+    JOURNEY_CAMERA.outroRadius,
+    current.azimuth + JOURNEY_CAMERA.outroTurn,
+    ELEVATION.end,
+    DRIFT_DIM,
+    DRIFT_VEIL,
+    NO_SHIFT
+  );
+  return lerpPose(current, finish, e);
 };

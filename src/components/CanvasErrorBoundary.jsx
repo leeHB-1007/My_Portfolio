@@ -12,6 +12,7 @@ class CanvasErrorBoundary extends React.Component {
 
   componentDidCatch(error) {
     console.warn("[canvas] 3D 배경을 그리지 못해 대체 화면을 표시합니다.", error);
+    if (this.props.onError) this.props.onError(error);
   }
 
   render() {

@@ -11,6 +11,7 @@ import {
   createDustAttributes,
   createGalaxyAttributes,
 } from "./galaxyGeometry";
+import { ROTATION_GLSL } from "../../journey/planets";
 
 const MAX_POINT_SIZE = 24;
 const GALAXY_POINT_SIZE = 0.05;
@@ -31,7 +32,8 @@ const galaxyVertexShader = /* glsl */ `
     vec3 p = position;
     float r = length(p.xz);
     // 안쪽이 더 빨리 도는 차등 회전. 팔이 빠르게 감기지 않도록 차이는 작게 둔다.
-    float angle = atan(p.z, p.x) - uTime * (0.05 + 0.04 / (1.0 + r));
+    // 항해 행성(PlanetSystem)과 카메라 목표 계산(rotateByTime)도 같은 식을 쓴다.
+    float angle = ${ROTATION_GLSL};
     p.x = cos(angle) * r;
     p.z = sin(angle) * r;
 
@@ -40,7 +42,9 @@ const galaxyVertexShader = /* glsl */ `
     gl_PointSize = min(uSize * aScale * uScale / max(-mvPosition.z, 0.001), uMaxSize);
 
     vColor = aColor;
-    vTwinkle = 0.8 + 0.2 * sin(uTime * 1.7 + aPhase);
+    // 카메라가 원반 안으로 들어가므로 아주 가까운 입자는 화면을 덮지 않게 사라지게 한다.
+    float nearFade = smoothstep(0.08, 0.35, -mvPosition.z);
+    vTwinkle = (0.8 + 0.2 * sin(uTime * 1.7 + aPhase)) * nearFade;
   }
 `;
 

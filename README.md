@@ -43,6 +43,20 @@ React 18, Vite, Tailwind CSS, Framer Motion, GSAP, Three.js 기반으로 만든 
 - 폴백: WebGL 오류는 `CanvasErrorBoundary`가 받아 `StaticGalaxy`를 보여주고, WebGL 컨텍스트가 손실되면 canvas를 숨겼다가 복구 시 다시 그립니다. Contact의 `EarthCanvas`도 같은 에러 경계로 감쌉니다.
 - 성능: 화면 폭에 따라 입자 수를 정하고(45,000 / 25,000 / 12,000), drei `PerformanceMonitor`가 프레임 저하를 감지하면 입자 수와 dpr을 한 번 낮춥니다.
 
+#### 은하 항해(은하 속 행성, 위성을 스크롤로 하나씩)
+
+Hero 인트로가 끝나면 카메라가 은하의 나선팔 한 지점으로 파고들어 챕터(About, Experience, Skills, Projects, Strengths)마다 작은 행성 하나를 비춥니다. 행성 주위에는 그 챕터의 세부항목이 위성으로 모두 떠 있고(5/4/9/6/6개), 스크롤하면 위성 고리가 회전목마처럼 돌며 앞으로 온 위성의 설명 카드가 차례로 나타납니다. 챕터의 위성을 다 지나면 카메라가 솟아올라 은하 전체를 보였다가 다음 행성으로 파고듭니다.
+
+- 모드: `JOURNEY_QUERY = "(min-height: 600px) and (prefers-reduced-motion: no-preference)"`(`src/journey/useJourneyMode.js`)가 참이고 은하 canvas를 쓸 수 있으면 `Hero → Journey → Contact → Footer`입니다. 낮은 화면, 모션 줄이기, WebGL 오류·컨텍스트 손실(`src/scroll/canvasStatus.js`)에서는 기존 일반 섹션(About~Feedbacks)과 드리프트 배경을 렌더합니다.
+- 스크롤 구조: `div.journey-track`(Hero 트랙의 마지막 한 화면과 겹침) 안의 `section.journey-stage`(sticky, 100svh). 챕터 구간 = 이동(`TRAVEL_VH = 1.0`) + 도착(`ARRIVE_VH = 0.6`) + 위성 n개(각 `ITEM_VH = 0.42`)이며, 단계·위성 번호·진행도와 패널·본문 투명도는 `src/scroll/journeyPose.js`의 순수 함수가 계산합니다.
+- 규모: 행성 반지름 0.085, 위성 0.02, 행성 높이 0.06(원반 입자층 안)으로 은하에 비해 작습니다. 카메라는 행성에서 0.82×fit 거리까지 다가가고, 은하 셰이더는 카메라 가까이(0.08~0.35)의 입자를 페이드합니다. 멀리서는 행성 자리마다 비콘이 보입니다.
+- 데이터·배치: `src/journey/items.js`가 항목과 챕터를, `src/journey/planets.js`가 행성 위치(`createPlanets`), 고리 각도(`ringAngle`), 위성 위치(`satellitePosition`)를 계산합니다. 행성의 시간 회전(`rotateByTime`)은 은하 셰이더와 같은 식(`ROTATION_GLSL`)을 쓰고, 위성 고리는 행성의 공전 좌표계에 고정됩니다.
+- 3D: `PlanetSystem`이 행성(은하 중심 방향 조명, fbm 표면, 대기 림, 후광, 일부 고리), 위성 고리, 비콘을 그리고, 현재 챕터 위성의 화면 좌표를 라벨 레지스트리(`src/journey/labels.js`)의 DOM 라벨과 연결선에 매 프레임 씁니다.
+- 챕터 패널: 챕터마다 패널 1개가 도착·위성 단계 내내 유지됩니다. 머리(소제목, 챕터 제목, 한 줄 설명) → 목차(위성 제목, 현재 항목 강조, 누르면 그 위성으로 이동) → 본문(도착 안내, 위성 본문 30개는 모두 DOM에 있고 교차 페이드) 순입니다. 내부 세로 스크롤 없이 CSS로 압축합니다.
+- 화면 구성(`JOURNEY_VIEWS`): 폭 1024px 이상은 행성 가로 30%·패널 오른쪽(가로 54~92%), 768~1023px은 같은 좌우 배치에 카메라를 조금 물리고 패널을 가로 50%부터, 768px 미만은 위쪽이 행성·고리 전용이고 패널이 그 아래(세로 35%부터)이며 현재 위성 라벨만 보이고 목차는 한 줄 가로 스크롤입니다. 앞 위성이 패널과 겹치지 않는지는 투영 계산(`src/journey/projection.js`)으로 단위 테스트합니다.
+- 모드 전환: 항해 ↔ 일반 섹션으로 트리가 바뀌면 바뀌기 직전에 읽던 섹션 앵커로 이동합니다(`src/scroll/sectionMemory.js`). WebGL 컨텍스트 손실은 2초 안에 복구되지 않을 때만 일반 섹션으로 내려갑니다.
+- 내비게이션: 위성 라벨이나 목차를 누르면 그 위성 위치로 스크롤합니다. 행성 아래에는 챕터 이름표가 따라다니고, 오른쪽에 챕터 점이 있으며, 트랙 안의 `#about`~`#strengths` 앵커(각 챕터 첫 위성)로 Navbar 링크가 동작합니다.
+
 ### 4. 모션과 3D를 쓰되 성능과 접근성도 함께 고려
 
 - Strengths 섹션은 `framer-motion`의 `useReducedMotion`을 사용하고, Hero의 스크롤 인디케이터는 CSS 애니메이션이라 모션 줄이기 환경에서 멈춥니다.
@@ -145,7 +159,9 @@ React 18, Vite, Tailwind CSS, Framer Motion, GSAP, Three.js 기반으로 만든 
 │   ├── assets/            # 이미지, 아이콘, 프로젝트 비주얼
 │   ├── components/        # Hero/About/Experience/Skills/Projects/Strengths/Contact 등 UI
 │   ├── components/canvas/ # R3F canvas 구성요소(은하, Earth)와 정적 배경
-│   ├── scroll/            # scrollRig, 카메라 pose 계산, 모션 일시정지 상태
+│   ├── components/journey/ # 은하 항해 챕터 패널·위성 라벨·챕터 점
+│   ├── journey/           # 항해 항목·챕터 구성, 행성·위성 배치, 라벨 레지스트리, 모드 판정
+│   ├── scroll/            # scrollRig, 카메라 pose 계산(인트로·항해), 모션 일시정지 상태
 │   ├── constants/         # 프로필, 섹션 데이터, 링크, 프로젝트 정의
 │   ├── hoc/               # Section wrapper
 │   ├── store/             # Zustand contact store
@@ -189,7 +205,7 @@ npm run build
 npm test
 ```
 
-Vitest로 은하 geometry 생성과 스크롤 → 카메라 pose 계산(`samplePose`)을 검증합니다.
+Vitest로 은하 geometry 생성, 스크롤 → 카메라 pose 계산(`samplePose`), 항해 항목·챕터 구성, 행성 배치·위성 고리, 구간 계산을 검증합니다.
 
 ### 빌드 결과 미리보기
 
