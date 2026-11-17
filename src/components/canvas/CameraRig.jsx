@@ -25,7 +25,13 @@ const KEYS = [
   "tx",
   "ty",
   "tz",
+  "fov",
+  "bank",
 ];
+const DEG = Math.PI / 180;
+// always 모드의 유휴 흔들림(방위·고도, rad)과 주기(초). 시간으로만 움직이므로 정지 중에는 고정된다.
+const IDLE_SWAY = { azimuth: 0.5 * DEG, elevation: 0.35 * DEG, roll: 0.25 * DEG };
+const IDLE_PERIOD = { azimuth: 47, elevation: 37, roll: 59 };
 const PROBE_POINTS = 64;
 const TAU = Math.PI * 2;
 
@@ -107,13 +113,27 @@ const CameraRig = ({ uniforms }) => {
     }
 
     const pose = current.current;
-    const flat = Math.cos(pose.elevation) * pose.radius;
+    // 유휴 흔들림은 pose(목표·수렴 판정)에 넣지 않고 카메라에만 더한다.
+    const time = rig.time;
+    const sway = (key) =>
+      state.frameloop === "always" && rig.mode !== "reduced"
+        ? IDLE_SWAY[key] * Math.sin((time / IDLE_PERIOD[key]) * TAU)
+        : 0;
+    const azimuth = pose.azimuth + sway("azimuth");
+    const elevation = pose.elevation + sway("elevation");
+    const flat = Math.cos(elevation) * pose.radius;
     camera.position.set(
-      pose.tx + Math.sin(pose.azimuth) * flat,
-      pose.ty + Math.sin(pose.elevation) * pose.radius,
-      pose.tz + Math.cos(pose.azimuth) * flat
+      pose.tx + Math.sin(azimuth) * flat,
+      pose.ty + Math.sin(elevation) * pose.radius,
+      pose.tz + Math.cos(azimuth) * flat
     );
     camera.lookAt(pose.tx, pose.ty, pose.tz);
+    // 이동 중 기울임(뱅크): 시선 축 기준 회전
+    camera.rotateZ(pose.bank + sway("roll"));
+    if (Math.abs(camera.fov - pose.fov) > 1e-4) {
+      camera.fov = pose.fov;
+      camera.updateProjectionMatrix();
+    }
 
     const { width, height } = state.size;
     if (pose.viewShiftX !== 0 || pose.viewShiftY !== 0) {

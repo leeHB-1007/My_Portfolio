@@ -17,18 +17,18 @@ const iconByLabel = {
 
 const Footer = () => {
   return (
-    <footer className="border-t border-white/10 bg-black-100/70 px-6 py-8 text-white backdrop-blur">
+    <footer className="site-footer px-6 py-8">
       <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-5 text-center sm:flex-row sm:text-left">
         <div>
-          <p className="text-[18px] font-semibold">
+          <p className="site-footer-name">
             {profile.name} | {profile.role}
           </p>
-          <p className="mt-1 text-sm text-secondary">
+          <p className="site-footer-note">
             Direct links to active channels.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center justify-center gap-4">
+        <div className="flex flex-wrap items-center justify-center gap-2">
           {profileLinks.map((link) => {
             const Icon = iconByLabel[link.label];
 
@@ -39,7 +39,7 @@ const Footer = () => {
                 target={link.href.startsWith("mailto:") ? undefined : "_blank"}
                 rel={link.href.startsWith("mailto:") ? undefined : "noopener noreferrer"}
                 aria-label={link.label}
-                className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/5 transition hover:border-[#915EFF] hover:text-[#b9b1f5]"
+                className="site-footer-link"
               >
                 <Icon size={18} />
               </a>

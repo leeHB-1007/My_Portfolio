@@ -1,17 +1,16 @@
 import { memo } from "react";
 
-// 챕터 패널 안의 위성 본문. 표시 전용이며 투명도는 scrollRig가 CSS 변수(--k)로 정한다.
+// 챕터 패널 안의 위성 본문. 표시 전용이며 투명도·시차는 scrollRig가 쓰는 --k를 CSS가 읽는다.
+// 본문의 직계 자식이 시차 단위다(index.css의 .journey-card > *).
 const Kicker = ({ children, className = "" }) => (
-  <p className={`journey-kicker text-[12px] uppercase tracking-[0.3em] text-[#b9b1f5] ${className}`}>
-    {children}
-  </p>
+  <p className={`journey-kicker ${className}`}>{children}</p>
 );
 
 const Bullets = ({ items }) => (
-  <ul className="journey-list mt-4 space-y-2">
+  <ul className="journey-list">
     {items.map((text) => (
-      <li key={text} className="journey-text flex items-start gap-3 text-white-100">
-        <span className="journey-bullet shrink-0 rounded-full bg-[#915EFF]" />
+      <li key={text} className="journey-list-item">
+        <span className="journey-bullet" aria-hidden="true" />
         <span>{text}</span>
       </li>
     ))}
@@ -19,10 +18,7 @@ const Bullets = ({ items }) => (
 );
 
 const Title = ({ id, children, className = "" }) => (
-  <h3
-    id={id}
-    className={`journey-title font-bold leading-tight text-white ${className}`}
-  >
+  <h3 id={id} className={`journey-title ${className}`}>
     {children}
   </h3>
 );
@@ -30,57 +26,46 @@ const Title = ({ id, children, className = "" }) => (
 const IntroBody = ({ data, titleId }) => (
   <>
     <Kicker>{data.role}</Kicker>
-    <Title id={titleId} className="mt-2">
+    <Title id={titleId} className="journey-title-hero">
       {data.name}
-      <span className="ml-2 text-[#915EFF]">{data.englishName}</span>
+      <span className="journey-title-alt">{data.englishName}</span>
     </Title>
-    <p className="journey-text mt-4 text-secondary">{data.summary}</p>
-    <div className="journey-block mt-5 rounded-2xl border border-white/10 bg-white/5">
-      <Kicker>Focus</Kicker>
-      <Bullets items={data.focus} />
+    <p className="journey-text journey-lead">{data.summary}</p>
+    <div className="journey-focus">
+      <p className="journey-focus-label">Focus</p>
+      <ul className="journey-focus-list">
+        {data.focus.map((text) => (
+          <li key={text}>{text}</li>
+        ))}
+      </ul>
     </div>
   </>
 );
 
 const ServiceBody = ({ data, titleId }) => (
   <>
-    <img
-      src={data.icon}
-      alt=""
-      aria-hidden="true"
-      className="journey-icon object-contain"
-    />
-    <Title id={titleId} className="mt-5">
+    <div className="journey-glyph">
+      <img src={data.icon} alt="" aria-hidden="true" className="journey-icon" />
+    </div>
+    <Title id={titleId} className="journey-title-hero">
       {data.title}
     </Title>
-    <p className="journey-text mt-3 text-secondary">{data.summary}</p>
+    <p className="journey-text journey-lead">{data.summary}</p>
   </>
 );
 
 const ExperienceBody = ({ data, titleId }) => (
   <>
-    <div className="flex items-center gap-4">
-      <div
-        className="journey-icon-circle flex shrink-0 items-center justify-center rounded-full"
-        style={{ background: data.iconBg }}
-      >
-        <img
-          src={data.icon}
-          alt=""
-          aria-hidden="true"
-          className="h-[60%] w-[60%] object-contain"
-        />
+    <div className="journey-role">
+      <div className="journey-icon-circle" style={{ background: data.iconBg }}>
+        <img src={data.icon} alt="" aria-hidden="true" className="journey-icon-inner" />
       </div>
-      <div>
+      <div className="journey-role-text">
         <Title id={titleId}>{data.title}</Title>
-        <p className="mt-1 text-[15px] font-semibold text-[#b9b1f5]">
-          {data.company_name}
-        </p>
+        <p className="journey-company">{data.company_name}</p>
       </div>
     </div>
-    <p className="mt-4 text-[13px] uppercase tracking-[0.2em] text-secondary">
-      {data.date}
-    </p>
+    <p className="journey-date">{data.date}</p>
     <Bullets items={data.points} />
   </>
 );
@@ -88,24 +73,17 @@ const ExperienceBody = ({ data, titleId }) => (
 const TechnologiesBody = ({ data, titleId }) => (
   <>
     <Kicker>Core stack</Kicker>
-    <Title id={titleId} className="mt-2">
-      Technologies
-    </Title>
-    <ul className="journey-tech-grid mt-5 grid grid-cols-3 sm:grid-cols-4">
+    <Title id={titleId}>Technologies</Title>
+    <ul className="journey-tech-grid">
       {data.map((technology) => (
-        <li
-          key={technology.name}
-          className="flex flex-col items-center rounded-2xl border border-white/10 bg-white/5 text-center"
-        >
+        <li key={technology.name}>
           <img
             src={technology.icon}
             alt=""
             aria-hidden="true"
-            className="journey-tech-icon object-contain"
+            className="journey-tech-icon"
           />
-          <span className="mt-2 text-[12px] font-medium leading-4 text-white-100">
-            {technology.name}
-          </span>
+          <span>{technology.name}</span>
         </li>
       ))}
     </ul>
@@ -115,17 +93,12 @@ const TechnologiesBody = ({ data, titleId }) => (
 const SkillGroupBody = ({ data, titleId }) => (
   <>
     <Kicker>Skill set</Kicker>
-    <Title id={titleId} className="mt-2">
+    <Title id={titleId} className="journey-title-hero">
       {data.title}
     </Title>
-    <ul className="mt-5 flex flex-wrap gap-3">
+    <ul className="journey-skill-list">
       {data.items.map((name) => (
-        <li
-          key={name}
-          className="rounded-full border border-white/10 bg-black/20 px-4 py-2 text-sm text-white-100"
-        >
-          {name}
-        </li>
+        <li key={name}>{name}</li>
       ))}
     </ul>
   </>
@@ -133,25 +106,22 @@ const SkillGroupBody = ({ data, titleId }) => (
 
 const ProjectBody = ({ data, titleId }) => (
   <>
-    <div className="journey-project-image relative mb-4 overflow-hidden rounded-2xl border border-white/5">
+    <div className="journey-project-image">
       <img
         src={data.image}
         alt={`${data.name} case study cover`}
         loading="lazy"
-        className="h-full w-full object-cover"
       />
-      <div className="absolute inset-0 bg-gradient-to-t from-tertiary via-tertiary/30 to-transparent" />
+      <p className="journey-case-kicker">Case Study</p>
     </div>
-    <Kicker className="journey-case-kicker">Case Study</Kicker>
-    <p className="journey-subtitle mt-2 font-semibold text-white-100">
-      {data.subtitle}
-    </p>
-    <Title id={titleId} className="mt-2">
+    {/* 같은 이름(BoostUs)의 사례가 여러 개라 구분하는 부제를 크게, 이름은 작게 둔다. */}
+    <Title id={titleId} className="journey-project-title">
       {data.name}
     </Title>
-    <p className="journey-text mt-2 text-secondary">{data.description}</p>
+    <p className="journey-subtitle">{data.subtitle}</p>
+    <p className="journey-text">{data.description}</p>
     <Bullets items={data.highlights} />
-    <div className="journey-tags mt-4 flex flex-wrap gap-x-3 gap-y-1">
+    <div className="journey-tags">
       {data.tags.map((tag) => (
         <p key={tag.name} className={tag.color}>
           #{tag.name}
@@ -163,13 +133,13 @@ const ProjectBody = ({ data, titleId }) => (
 
 const StrengthBody = ({ data, titleId, number }) => (
   <>
-    <div className="flex items-center gap-4">
-      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#915EFF]/20 text-[15px] font-semibold text-[#b9b1f5]">
-        {String(number).padStart(2, "0")}
-      </div>
-      <Title id={titleId}>{data.title}</Title>
-    </div>
-    <p className="journey-text mt-5 text-secondary">{data.description}</p>
+    <p className="journey-strength-number" aria-hidden="true">
+      {String(number).padStart(2, "0")}
+    </p>
+    <Title id={titleId} className="journey-title-hero">
+      {data.title}
+    </Title>
+    <p className="journey-text journey-statement">{data.description}</p>
   </>
 );
 
@@ -190,6 +160,8 @@ const JourneyCard = memo(({ item }) => {
 
   return (
     <article
+      className="journey-card"
+      data-kind={item.kind}
       data-journey-index={item.index}
       aria-labelledby={titleId}
     >

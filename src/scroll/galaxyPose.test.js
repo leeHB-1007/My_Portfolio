@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   AZIMUTH,
+  CONTACT_SCENE,
   DRIFT_DIM,
   DRIFT_VEIL,
   ELEVATION,
@@ -81,14 +82,45 @@ describe("samplePose", () => {
     expect(end.viewShiftY).toBe(0);
   });
 
-  it("maxScroll에서 마무리 pose, 그 너머는 clamp", () => {
+  it("maxScroll에서 마지막 장면(Contact: 은하 전체가 오른쪽), 그 너머는 clamp", () => {
     const last = at(base.maxScroll);
-    expect(last.radius).toBeCloseTo(RADIUS.end, 6);
+    const scene = CONTACT_SCENE.side;
+    expect(last.radius).toBeCloseTo(scene.radius, 6);
     expect(last.azimuth).toBeCloseTo(AZIMUTH.end, 6);
-    expect(last.elevation).toBeCloseTo(32 * DEG, 6);
-    expect(last.dim).toBe(DRIFT_DIM);
-    expect(last.veil).toBe(DRIFT_VEIL);
+    expect(last.elevation).toBeCloseTo(scene.elevation, 6);
+    expect(last.dim).toBeCloseTo(scene.dim, 6);
+    expect(last.veil).toBeCloseTo(scene.veil, 6);
+    expect(last.viewShiftX).toBeCloseTo(scene.shift.x, 6);
+    expect(last.tx).toBe(0);
     expect(at(base.maxScroll + 5000)).toEqual(last);
+  });
+
+  it("좁은 화면의 마지막 장면은 은하가 위쪽 배경", () => {
+    const last = at(base.maxScroll, { wide: false, aspect: 390 / 844 });
+    expect(last.viewShiftX).toBeCloseTo(CONTACT_SCENE.stacked.shift.x, 6);
+    expect(last.viewShiftY).toBeCloseTo(CONTACT_SCENE.stacked.shift.y, 6);
+    expect(last.veil).toBeCloseTo(CONTACT_SCENE.stacked.veil, 6);
+  });
+
+  it("outroStart(Contact 위치)부터 한 화면 동안 마지막 장면으로 바뀐다", () => {
+    const outroStart = 6000;
+    const before = at(outroStart - 1, { outroStart });
+    expect(before.veil).toBeCloseTo(DRIFT_VEIL, 6);
+    expect(before.viewShiftX).toBe(0);
+    const done = at(outroStart + base.vh, { outroStart });
+    expect(done.veil).toBeCloseTo(CONTACT_SCENE.side.veil, 6);
+    expect(done.radius).toBeCloseTo(CONTACT_SCENE.side.radius, 6);
+    let previous = null;
+    for (let y = outroStart - 50; y <= outroStart + base.vh + 50; y += 5) {
+      const pose = at(y, { outroStart });
+      expectFinite(pose);
+      if (previous) {
+        POSE_KEYS.forEach((key) => {
+          if (key !== "azimuth") expect(Math.abs(pose[key] - previous[key])).toBeLessThan(0.2);
+        });
+      }
+      previous = pose;
+    }
   });
 
   it("heroEnd + vh에서 베일이 DRIFT_VEIL, 반경은 드리프트 값", () => {
@@ -121,7 +153,7 @@ describe("samplePose", () => {
     const fit = computeFit(portrait.aspect);
     expect(at(0, portrait).radius).toBeCloseTo(RADIUS.introStart * fit, 6);
     expect(at(base.heroEnd, portrait).radius).toBeCloseTo(RADIUS.introEnd * fit, 6);
-    expect(at(base.maxScroll, portrait).radius).toBeCloseTo(RADIUS.end * fit, 6);
+    expect(at(base.maxScroll, portrait).radius).toBeCloseTo(CONTACT_SCENE.stacked.radius * fit, 6);
   });
 
   it("좁은 화면의 치우침은 아래쪽이고 heroP 0.6에서 0", () => {
@@ -147,7 +179,7 @@ describe("samplePose", () => {
         }
       });
 
-      // 인트로 이후에는 radius·veil이 줄어들지 않는다.
+      // 인트로 이후에는 radius가 줄어들지 않고(13 → 15 마지막 장면) veil은 0~1.
       const after = Array.from({ length: 101 }, (_, i) =>
         samplePose({
           ...input,
@@ -157,16 +189,17 @@ describe("samplePose", () => {
       after.forEach((pose, i) => {
         if (i > 0) {
           expect(pose.radius).toBeGreaterThanOrEqual(after[i - 1].radius - 1e-9);
-          expect(pose.veil).toBeGreaterThanOrEqual(after[i - 1].veil - 1e-9);
+          expect(pose.veil).toBeGreaterThanOrEqual(0);
+          expect(pose.veil).toBeLessThanOrEqual(1);
         }
       });
     });
 
     const short = { maxScroll: base.heroEnd + base.vh };
     const last = at(short.maxScroll, short);
-    expect(last.radius).toBeCloseTo(RADIUS.end, 6);
+    expect(last.radius).toBeCloseTo(CONTACT_SCENE.side.radius, 6);
     expect(last.azimuth).toBeCloseTo(AZIMUTH.end, 6);
-    expect(last.veil).toBe(DRIFT_VEIL);
+    expect(last.veil).toBeCloseTo(CONTACT_SCENE.side.veil, 6);
   });
 
   it("reduced 모드는 scrollY와 무관하게 같은 pose", () => {

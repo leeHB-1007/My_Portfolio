@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 
 import { registerLabel } from "../../journey/labels";
 import { scrollToJourneyItem } from "../../scroll/scrollRig";
+import { hoverProps } from "./hover";
 
 // 위치(transform)와 행성 앞뒤 투명도(--a)는 Canvas 쪽 PlanetSystem이 매 프레임 쓴다.
 // 누르면 그 위성 위치로 스크롤할 뿐이고, 설명은 스크롤만으로도 차례로 볼 수 있다.
@@ -18,6 +19,7 @@ const JourneyLabel = ({ item, current }) => {
         data-journey-index={item.index}
         aria-current={current ? "step" : undefined}
         onClick={() => scrollToJourneyItem(item.index)}
+        {...hoverProps(item.id)}
       >
         <span className="journey-label-title">{item.label.title}</span>
         {item.label.sub && (

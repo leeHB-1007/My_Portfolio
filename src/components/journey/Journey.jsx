@@ -2,18 +2,39 @@ import { useEffect, useRef, useState } from "react";
 
 import { journeyChapters, journeyLayout } from "../../journey/data";
 import { CONNECTOR_ID, PLANET_TAG_ID, registerLabel } from "../../journey/labels";
-import { JOURNEY_VIEWS, journeyAnchors } from "../../scroll/journeyPose";
-import { attachJourney, rig } from "../../scroll/scrollRig";
+import {
+  JOURNEY_STEPPER,
+  JOURNEY_VIEWS,
+  journeyAnchors,
+  journeyStops,
+  stopIndexOf,
+} from "../../scroll/journeyPose";
+import { attachJourney, rig, stepJourney } from "../../scroll/scrollRig";
+import JourneyGuide from "./JourneyGuide";
 import JourneyLabels from "./JourneyLabels";
 import JourneyPanel from "./JourneyPanel";
 import JourneyProgress from "./JourneyProgress";
+import JourneyStepper from "./JourneyStepper";
+import JourneyTitles from "./JourneyTitles";
 
 const anchors = journeyAnchors(journeyLayout);
+const stopCount = journeyStops(journeyLayout).length;
+// 키를 누르고 있을 때 반복 입력은 이 간격(ms)마다 한 번만 넘긴다.
+const KEY_REPEAT_MS = 450;
+const EDITABLE = "input, textarea, select, [contenteditable]:not([contenteditable='false'])";
 // 패널 영역 위치는 투영 테스트와 같은 상수(JOURNEY_VIEWS)를 CSS 변수로 넘긴다.
 const panelRegionStyle = {
   "--panel-left-wide": JOURNEY_VIEWS.wide.panelLeft,
   "--panel-left-mid": JOURNEY_VIEWS.mid.panelLeft,
   "--panel-top-narrow": JOURNEY_VIEWS.narrow.panelTop,
+};
+// 이전/다음 버튼은 넓은·중간 화면에서 행성 아래(가로 위치 = 체류 중 행성의 화면 위치)에 둔다.
+const stageStyle = {
+  "--planet-x-wide": 0.5 + JOURNEY_VIEWS.wide.shift.x,
+  "--planet-x-mid": 0.5 + JOURNEY_VIEWS.mid.shift.x,
+  "--stepper-height": `${JOURNEY_STEPPER.height}px`,
+  "--stepper-bottom-side": `${JOURNEY_STEPPER.bottomSide}px`,
+  "--stepper-bottom-narrow": `${JOURNEY_STEPPER.bottomNarrow}px`,
 };
 
 const checkPanelFit = (region, index) => {
@@ -39,15 +60,38 @@ const Journey = () => {
 
   useEffect(() => {
     const region = panelsRef.current;
+    const stage = stageRef.current;
     return attachJourney({
       track: trackRef.current,
-      stage: stageRef.current,
+      stage,
       panels: Array.from(region.querySelectorAll("[data-journey-panel]")),
       items: Array.from(region.querySelectorAll("article[data-journey-index]")),
       hints: Array.from(region.querySelectorAll("[data-journey-hint]")),
+      titles: Array.from(stage.querySelectorAll("[data-journey-title]")),
       region,
       layout: journeyLayout,
     });
+  }, []);
+
+  // 방향키: → 다음, ← 이전. 입력 칸(Contact 폼 등)과 수정 키 조합에서는 쓰지 않는다.
+  useEffect(() => {
+    let lastRepeat = 0;
+    const onKeyDown = (event) => {
+      if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
+      if (event.defaultPrevented) return;
+      if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
+      if (event.target instanceof Element && event.target.closest(EDITABLE)) return;
+      if (!rig.journey || !rig.journey.measured) return;
+      event.preventDefault();
+      if (event.repeat) {
+        const now = performance.now();
+        if (now - lastRepeat < KEY_REPEAT_MS) return;
+        lastRepeat = now;
+      }
+      stepJourney(event.key === "ArrowRight" ? 1 : -1);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
   useEffect(() => {
@@ -91,11 +135,31 @@ const Journey = () => {
         />
       ))}
 
-      <section ref={stageRef} className="journey-stage" aria-label="포트폴리오 항해">
+      <section
+        ref={stageRef}
+        className="journey-stage"
+        aria-label="포트폴리오 항해"
+        style={stageStyle}
+      >
+        <JourneyTitles chapters={journeyChapters} />
         <JourneyProgress chapters={journeyChapters} current={view.index} />
+        <JourneyStepper
+          position={stopIndexOf(journeyLayout, view)}
+          total={stopCount}
+        />
 
+        <JourneyGuide view={view} />
+
+        {/* 이동 중(data-journey-phase="travel")에는 목적지 표시(Next + 행성 둘레 원)로 바뀐다. */}
         <div ref={tagRef} className="journey-planet-tag" aria-hidden="true">
-          <span>{chapter.title}</span>
+          <span className="journey-planet-tag-ring" />
+          <span className="journey-planet-tag-caption">
+            <span className="journey-planet-tag-next">Next</span>
+            <span className="journey-planet-tag-number">
+              {String(chapter.index + 1).padStart(2, "0")}
+            </span>
+            <span className="journey-planet-tag-title">{chapter.title}</span>
+          </span>
         </div>
         <JourneyLabels
           chapters={journeyChapters}

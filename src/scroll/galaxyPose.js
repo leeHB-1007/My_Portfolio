@@ -1,4 +1,4 @@
-import { JOURNEY_CAMERA, lerpPose, sampleJourneyPose } from "./journeyPose";
+import { BASE_FOV, JOURNEY_CAMERA, lerpPose, sampleJourneyPose } from "./journeyPose";
 
 const DEG = Math.PI / 180;
 
@@ -11,13 +11,19 @@ export const VIEW_SHIFT_X = 0.18;
 export const VIEW_SHIFT_Y = 0.3;
 export const VIEW_SHIFT_END = 0.6;
 
-export const RADIUS = { introStart: 22, introEnd: 7, drift: 13, end: 20 };
+export const RADIUS = { introStart: 22, introEnd: 7, drift: 13 };
 export const AZIMUTH = { introEnd: 200 * DEG, end: 380 * DEG };
 export const ELEVATION = {
   introStart: 35 * DEG,
   introEnd: 18 * DEG,
   drift: 28 * DEG,
-  end: 32 * DEG,
+};
+
+// 마지막 장면(Contact): 물러난 은하 전체를 보여준다. side(768px 이상)는 은하가 화면 오른쪽
+// (패널은 왼쪽), stacked(좁은 화면)는 은하가 위쪽 배경. 항해 모드와 일반 섹션 모드가 같은 구도를 쓴다.
+export const CONTACT_SCENE = {
+  side: { radius: 15, elevation: 38 * DEG, shift: { x: 0.22, y: 0 }, veil: 0.45, dim: 0.9 },
+  stacked: { radius: 15, elevation: 38 * DEG, shift: { x: 0, y: -0.22 }, veil: 0.7, dim: 0.9 },
 };
 
 export const POSE_KEYS = [
@@ -31,7 +37,12 @@ export const POSE_KEYS = [
   "tx",
   "ty",
   "tz",
+  "fov",
+  "bank",
 ];
+
+// fov: 시야각(도, 항해 이동 중에만 넓어진다), bank: 시선 축 기울기(rad)
+export { BASE_FOV };
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -63,9 +74,16 @@ const pose = (fit, radius, azimuth, elevation, dim, veil, shift) => ({
   tx: 0,
   ty: 0,
   tz: 0,
+  fov: BASE_FOV,
+  bank: 0,
 });
 
 const NO_SHIFT = { x: 0, y: 0 };
+
+const contactScene = (fit, azimuth, view) => {
+  const scene = view === "narrow" ? CONTACT_SCENE.stacked : CONTACT_SCENE.side;
+  return pose(fit, scene.radius, azimuth, scene.elevation, scene.dim, scene.veil, scene.shift);
+};
 
 export const samplePose = ({
   scrollY,
@@ -81,6 +99,9 @@ export const samplePose = ({
   // 항해 전용: 화면 구성(wide|mid|narrow)과 방위각 정규화 시각(journeyPose 참고)
   view = wide ? "wide" : "narrow",
   shiftTime = time,
+  // 일반 섹션 모드에서 마지막 장면으로 바뀌기 시작하는 스크롤 위치(rig가 Contact 위치로 잰다).
+  // 없으면 문서 끝 한 화면.
+  outroStart = null,
 }) => {
   const fit = computeFit(aspect);
 
@@ -126,10 +147,13 @@ export const samplePose = ({
   const rest = last - end;
   const scale = screen > 0 ? Math.min(1, rest / (2 * screen)) : 0;
   const retreat = screen * scale;
-  const finish = screen * scale;
-  const driftEnd = last - finish;
   const along = y - end;
   const azimuth = lerp(AZIMUTH.introEnd, AZIMUTH.end, rest > 0 ? along / rest : 1);
+  const measured = Number.isFinite(outroStart);
+  const finishStart = measured
+    ? clamp(outroStart, end + retreat, last)
+    : last - screen * scale;
+  const finishLength = measured ? Math.min(screen, last - finishStart) : screen * scale;
 
   if (retreat > 0 && along < retreat) {
     const s = along / retreat;
@@ -145,28 +169,11 @@ export const samplePose = ({
     );
   }
 
-  if (y < driftEnd || finish <= 0) {
-    return pose(
-      fit,
-      RADIUS.drift,
-      azimuth,
-      ELEVATION.drift,
-      DRIFT_DIM,
-      DRIFT_VEIL,
-      NO_SHIFT
-    );
-  }
+  const drift = pose(fit, RADIUS.drift, azimuth, ELEVATION.drift, DRIFT_DIM, DRIFT_VEIL, NO_SHIFT);
+  if (y < finishStart) return drift;
 
-  const e = smoothstep(clamp((y - driftEnd) / finish, 0, 1));
-  return pose(
-    fit,
-    lerp(RADIUS.drift, RADIUS.end, e),
-    azimuth,
-    lerp(ELEVATION.drift, ELEVATION.end, e),
-    DRIFT_DIM,
-    DRIFT_VEIL,
-    NO_SHIFT
-  );
+  const e = finishLength > 0 ? smoothstep(clamp((y - finishStart) / finishLength, 0, 1)) : 1;
+  return lerpPose(drift, contactScene(fit, azimuth, view), e);
 };
 
 // 항해 모드의 인트로 이후: 인트로 끝 → 행성 항해 → Contact 쪽 마무리.
@@ -204,16 +211,9 @@ const sampleAfterIntro = ({ y, end, screen, last, fit, view, journey, time, shif
   });
   if (y <= journeyEnd) return current;
 
+  // 마지막 위성 → Contact 장면: 원점(은하 중심)을 향해 물러나며 은하 전체가 옆(좁은 화면은 위)에 보인다.
   const outro = Math.min(screen, last - journeyEnd);
   const e = outro > 0 ? smoothstep(clamp((y - journeyEnd) / outro, 0, 1)) : 1;
-  const finish = pose(
-    fit,
-    JOURNEY_CAMERA.outroRadius,
-    current.azimuth + JOURNEY_CAMERA.outroTurn,
-    ELEVATION.end,
-    DRIFT_DIM,
-    DRIFT_VEIL,
-    NO_SHIFT
-  );
+  const finish = contactScene(fit, current.azimuth + JOURNEY_CAMERA.outroTurn, view);
   return lerpPose(current, finish, e);
 };

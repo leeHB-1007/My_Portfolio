@@ -2,10 +2,7 @@ import React, { useRef, useState } from "react";
 import { motion } from "framer-motion";
 
 import useContactStore from "../store/contractStore";
-import { styles } from "../styles";
 import { profileLinks } from "../constants";
-import { EarthCanvas } from "./canvas";
-import CanvasErrorBoundary from "./CanvasErrorBoundary";
 import { SectionWrapper } from "../hoc";
 import { slideIn } from "../utils/motion";
 
@@ -39,45 +36,35 @@ const Contact = () => {
   };
 
   return (
-    <div className="xl:mt-12 flex flex-col-reverse gap-10 overflow-hidden xl:flex-row">
-      <motion.div
-        variants={slideIn("left", "tween", 0.2, 1)}
-        className="z-10 flex-[0.75] rounded-2xl bg-black-100 p-8"
-      >
-        <p className={styles.sectionSubText}>Get in touch</p>
-        <h3 className={styles.sectionHeadText}>Contact.</h3>
+    <div className="contact-layout">
+      <motion.div variants={slideIn("left", "tween", 0.2, 1)} className="contact-panel">
+        <p className="contact-sub">Get in touch</p>
+        <h3 className="contact-title">Contact.</h3>
 
-        <p className="mt-5 max-w-2xl text-[16px] leading-8 text-secondary">
+        <p className="contact-lead">
           폼이 실패해도 아래 채널로 바로 연락할 수 있도록 직접 링크를 함께
           제공합니다.
         </p>
 
-        <div className="mt-8 grid gap-4 md:grid-cols-2">
+        <ul className="contact-links">
           {profileLinks.map((link) => (
-            <a
-              key={link.label}
-              href={link.href}
-              target={link.href.startsWith("mailto:") ? undefined : "_blank"}
-              rel={link.href.startsWith("mailto:") ? undefined : "noopener noreferrer"}
-              className="rounded-2xl border border-white/10 bg-tertiary/70 p-4 transition hover:border-[#915EFF]"
-            >
-              <p className="text-sm uppercase tracking-[0.25em] text-[#b9b1f5]">
-                {link.label}
-              </p>
-              <p className="mt-2 break-all text-[15px] text-white-100">
-                {link.value}
-              </p>
-            </a>
+            <li key={link.label}>
+              <a
+                href={link.href}
+                target={link.href.startsWith("mailto:") ? undefined : "_blank"}
+                rel={link.href.startsWith("mailto:") ? undefined : "noopener noreferrer"}
+                className="contact-link"
+              >
+                <p className="contact-link-label">{link.label}</p>
+                <p className="contact-link-value">{link.value}</p>
+              </a>
+            </li>
           ))}
-        </div>
+        </ul>
 
-        <form
-          ref={formRef}
-          onSubmit={handleSubmit}
-          className="mt-12 flex flex-col gap-8"
-        >
-          <label className="flex flex-col">
-            <span className="mb-4 font-medium text-white">Your Name</span>
+        <form ref={formRef} onSubmit={handleSubmit} className="contact-form">
+          <label className="contact-field">
+            <span className="contact-field-label">Your Name</span>
             <input
               type="text"
               name="name"
@@ -86,12 +73,12 @@ const Contact = () => {
               placeholder="이름을 적어주세요"
               required
               autoComplete="name"
-              className="rounded-lg border border-transparent bg-tertiary px-6 py-4 font-medium text-white outline-none transition placeholder:text-secondary focus:border-[#915EFF]"
+              className="contact-input"
             />
           </label>
 
-          <label className="flex flex-col">
-            <span className="mb-4 font-medium text-white">Your email</span>
+          <label className="contact-field">
+            <span className="contact-field-label">Your email</span>
             <input
               type="email"
               name="email"
@@ -100,26 +87,26 @@ const Contact = () => {
               placeholder="이메일 주소를 적어주세요"
               required
               autoComplete="email"
-              className="rounded-lg border border-transparent bg-tertiary px-6 py-4 font-medium text-white outline-none transition placeholder:text-secondary focus:border-[#915EFF]"
+              className="contact-input"
             />
           </label>
 
-          <label className="flex flex-col">
-            <span className="mb-4 font-medium text-white">Your Message</span>
+          <label className="contact-field">
+            <span className="contact-field-label">Your Message</span>
             <textarea
-              rows={7}
+              rows={6}
               name="message"
               value={formData.message}
               onChange={handleChange}
               placeholder="내용을 적어주세요"
               required
-              className="resize-none rounded-lg border border-transparent bg-tertiary px-6 py-4 font-medium text-white outline-none transition placeholder:text-secondary focus:border-[#915EFF]"
+              className="contact-input"
             />
           </label>
 
           {submissionError && (
             <p
-              className="text-sm text-red-300"
+              className="contact-message text-red-300"
               role="alert"
               aria-live="assertive"
               aria-atomic="true"
@@ -130,7 +117,7 @@ const Contact = () => {
 
           {successMessage && !submissionError && (
             <p
-              className="text-sm text-emerald-300"
+              className="contact-message text-emerald-300"
               role="status"
               aria-live="polite"
               aria-atomic="true"
@@ -139,25 +126,10 @@ const Contact = () => {
             </p>
           )}
 
-          <button
-            type="submit"
-            className="w-fit rounded-xl bg-tertiary px-8 py-3 font-bold text-white shadow-md shadow-primary outline-none transition hover:bg-[#2a2547] disabled:cursor-not-allowed disabled:opacity-70"
-            disabled={loading}
-          >
+          <button type="submit" className="contact-submit" disabled={loading}>
             {loading ? "Sending..." : "Send"}
           </button>
         </form>
-      </motion.div>
-
-      <motion.div
-        variants={slideIn("right", "tween", 0.2, 1)}
-        className="relative min-h-[320px] xl:flex-1 xl:h-auto"
-      >
-        <div className="absolute inset-0 z-0">
-          <CanvasErrorBoundary fallback={<div className="h-full w-full" />}>
-            <EarthCanvas />
-          </CanvasErrorBoundary>
-        </div>
       </motion.div>
     </div>
   );

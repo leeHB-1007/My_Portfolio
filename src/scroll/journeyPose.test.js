@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { createPlanets, rotateByTime } from "../journey/planets";
-import { AZIMUTH, ELEVATION, POSE_KEYS, RADIUS, samplePose } from "./galaxyPose";
+import { AZIMUTH, CONTACT_SCENE, POSE_KEYS, RADIUS, samplePose } from "./galaxyPose";
 import {
   ANCHOR_U,
   ARRIVE_VH,
@@ -11,7 +11,12 @@ import {
   ROTATE_END,
   TRAVEL_VH,
   createJourneyLayout,
+  STOP_TOLERANCE,
+  findStop,
   itemOffset,
+  journeyStops,
+  stopIndexOf,
+  travelEase,
   journeyAnchors,
   sampleJourney,
   panelState,
@@ -195,6 +200,123 @@ describe("panelState", () => {
   });
 });
 
+describe("정지점(이전/다음)", () => {
+  const stops = journeyStops(layout);
+  const positions = stops.map((stop) => stop.at);
+
+  it("챕터마다 도착 1개 + 위성 n개, 전체 5 + 30개가 스크롤 순서로 증가", () => {
+    expect(stops).toHaveLength(35);
+    expect(stops.filter((stop) => stop.item === -1).map((stop) => stop.chapter)).toEqual([
+      0, 1, 2, 3, 4,
+    ]);
+    stops.forEach((stop, i) => {
+      if (i > 0) expect(stop.at).toBeGreaterThan(stops[i - 1].at);
+    });
+    expect(stops[0]).toEqual({ chapter: 0, item: -1, at: TRAVEL_VH + ARRIVE_VH / 2 });
+    expect(stops[1].item).toBe(0);
+    expect(stops[34]).toMatchObject({ chapter: 4, item: 5 });
+  });
+
+  it("도착 정지점은 도착 단계 가운데, 위성 정지점은 그 위성의 정지 구간", () => {
+    stops.forEach((stop) => {
+      const state = sampleJourney(layout, stop.at);
+      expect(state.index).toBe(stop.chapter);
+      if (stop.item === -1) {
+        expect(state.phase).toBe("arrive");
+        expect(state.a).toBeCloseTo(0.5, 6);
+      } else {
+        expect(state).toMatchObject({ phase: "item", item: stop.item });
+        expect(state.ring).toBeCloseTo(stop.item, 9);
+        expect(state.u).toBeGreaterThan(ROTATE_END);
+      }
+      expect(stopIndexOf(layout, state)).toBe(stops.indexOf(stop));
+    });
+  });
+
+  it("다음/이전: 가장 가까운 앞뒤 정지점, 근처면 건너뛰고, 끝에서는 -1", () => {
+    // 항해 시작 전 → 첫 도착
+    expect(findStop(positions, -3, 1, STOP_TOLERANCE)).toBe(0);
+    expect(findStop(positions, 0, 1, STOP_TOLERANCE)).toBe(0);
+    // 정지점 위·근처에서는 그 정지점을 건너뛴다.
+    expect(findStop(positions, positions[5], 1, STOP_TOLERANCE)).toBe(6);
+    expect(findStop(positions, positions[5] - STOP_TOLERANCE * 0.5, 1, STOP_TOLERANCE)).toBe(6);
+    expect(findStop(positions, positions[5], -1, STOP_TOLERANCE)).toBe(4);
+    expect(findStop(positions, positions[5] + STOP_TOLERANCE * 0.5, -1, STOP_TOLERANCE)).toBe(4);
+    // 두 정지점 사이에서는 진행 방향의 가장 가까운 것
+    const between = (positions[7] + positions[8]) / 2;
+    expect(findStop(positions, between, 1, STOP_TOLERANCE)).toBe(8);
+    expect(findStop(positions, between, -1, STOP_TOLERANCE)).toBe(7);
+    // 첫 정지점에서 이전, 마지막 정지점에서 다음 → 끝(-1)
+    expect(findStop(positions, positions[0], -1, STOP_TOLERANCE)).toBe(-1);
+    expect(findStop(positions, positions[34], 1, STOP_TOLERANCE)).toBe(-1);
+    // Contact 이후(트랙 끝 너머)에서 이전 → 마지막 정지점
+    expect(findStop(positions, layout.total + 5, -1, STOP_TOLERANCE)).toBe(34);
+  });
+
+  it("다음을 반복하면 35개를 모두 한 번씩 지난다", () => {
+    let position = -1;
+    const visited = [];
+    for (;;) {
+      const index = findStop(positions, position, 1, STOP_TOLERANCE);
+      if (index < 0) break;
+      visited.push(index);
+      position = positions[index];
+    }
+    expect(visited).toEqual(stops.map((_, i) => i));
+  });
+});
+
+describe("이동·도착 연출", () => {
+  it("이동 보간은 0에서 1로 단조 증가하고, 출발이 느리고 도착이 길다", () => {
+    let previous = -1;
+    for (let i = 0; i <= 100; i += 1) {
+      const value = travelEase(i / 100);
+      expect(value).toBeGreaterThanOrEqual(previous);
+      previous = value;
+    }
+    expect(travelEase(0)).toBe(0);
+    expect(travelEase(1)).toBe(1);
+    // 처음 10%에서 움직인 양보다 마지막 10%에서 움직인 양이 작다(길게 미끄러지듯 도착).
+    expect(1 - travelEase(0.9)).toBeLessThan(travelEase(0.1) + 0.02);
+    expect(travelEase(0.5)).toBeGreaterThan(0.5);
+  });
+
+  it("시야각은 이동 중간에 최대 68°, 체류 중에는 60°이고 기울임은 최대 6°", () => {
+    const segment = layout.segments[2];
+    const middle = at(yAt(segment.start + TRAVEL_VH / 2));
+    expect(middle.fov).toBeCloseTo(68, 6);
+    let maxBank = 0;
+    for (let i = 0; i <= 100; i += 1) {
+      const pose = at(yAt(segment.start + (TRAVEL_VH * i) / 100));
+      maxBank = Math.max(maxBank, Math.abs(pose.bank));
+      expect(pose.fov).toBeGreaterThanOrEqual(60 - 1e-9);
+      expect(pose.fov).toBeLessThanOrEqual(68 + 1e-9);
+    }
+    expect(maxBank).toBeCloseTo(6 * DEG, 3);
+    const dwell = at(yAt(itemOffset(segment, 1, 0.6)));
+    expect(dwell.fov).toBe(60);
+    expect(dwell.bank).toBe(0);
+    expect(at(0).fov).toBe(60);
+  });
+
+  it("고리 회전은 끝에서 약하게 넘쳤다가 정지 구간에서 정확히 제자리", () => {
+    const segment = layout.segments[2];
+    let peak = 0;
+    for (let i = 0; i <= 60; i += 1) {
+      peak = Math.max(peak, sampleJourney(layout, itemOffset(segment, 3, (ROTATE_END * i) / 60)).ring);
+    }
+    expect(peak).toBeGreaterThan(3);
+    expect(peak).toBeLessThan(3.05);
+  });
+
+  it("도착 단계 진행도 a는 0 → 1", () => {
+    const segment = layout.segments[1];
+    expect(sampleJourney(layout, segment.start + TRAVEL_VH + 0.001).a).toBeCloseTo(0, 2);
+    expect(sampleJourney(layout, segment.start + TRAVEL_VH + ARRIVE_VH / 2).a).toBeCloseTo(0.5, 6);
+    expect(sampleJourney(layout, itemOffset(segment, 0, 0.5)).a).toBe(1);
+  });
+});
+
 describe("samplePose + 항해", () => {
   it("인트로 끝과 첫 구간 시작이 같은 pose", () => {
     const introEnd = samplePose({ ...base, journey: null, scrollY: HERO_END });
@@ -306,18 +428,28 @@ describe("samplePose + 항해", () => {
     expect(peak.elevation).toBeCloseTo(12 * DEG + 24 * DEG, 6);
   });
 
-  it("항해 끝 이후 원점을 향해 물러나 마무리 pose로 간다", () => {
+  it("항해 끝 이후 원점을 향해 물러나 마지막 장면(Contact)으로 간다", () => {
     const last = at(JOURNEY.end);
     expect(last.tx).toBeCloseTo(rotateByTime(planets[4], 0).x, 6);
     const finish = at(base.maxScroll);
     expect(finish.tx).toBeCloseTo(0, 9);
     expect(finish.ty).toBeCloseTo(0, 9);
     expect(finish.tz).toBeCloseTo(0, 9);
-    expect(finish.radius).toBeCloseTo(JOURNEY_CAMERA.outroRadius, 6);
-    expect(finish.elevation).toBeCloseTo(ELEVATION.end, 6);
-    expect(finish.veil).toBeCloseTo(0.8, 6);
-    expect(finish.viewShiftX).toBe(0);
+    expect(finish.radius).toBeCloseTo(CONTACT_SCENE.side.radius, 6);
+    expect(finish.elevation).toBeCloseTo(CONTACT_SCENE.side.elevation, 6);
+    expect(finish.veil).toBeCloseTo(CONTACT_SCENE.side.veil, 6);
+    expect(finish.viewShiftX).toBeCloseTo(CONTACT_SCENE.side.shift.x, 6);
+    expect(finish.fov).toBe(60);
     expect(at(base.maxScroll + 5000)).toEqual(finish);
+    // 마지막 위성 → Contact 전환은 끊김 없이 이어진다.
+    let previous = at(JOURNEY.end - 10);
+    for (let y = JOURNEY.end - 10; y <= base.maxScroll; y += 4) {
+      const pose = at(y);
+      ["radius", "elevation", "veil", "viewShiftX", "tx", "tz"].forEach((key) => {
+        expect(Math.abs(pose[key] - previous[key])).toBeLessThan(0.2);
+      });
+      previous = pose;
+    }
   });
 
   it("세로 화면은 반경에 fit을 곱한다", () => {

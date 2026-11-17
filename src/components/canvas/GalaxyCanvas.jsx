@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { Canvas } from "@react-three/fiber";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { PerformanceMonitor } from "@react-three/drei";
 
 import CameraRig from "./CameraRig";
 import Galaxy from "./Galaxy";
 import PlanetSystem from "./PlanetSystem";
+import PostEffects from "./PostEffects";
 import { GALAXY_MAX_COUNT } from "./galaxyGeometry";
 import {
   getMotionPaused,
@@ -13,7 +14,7 @@ import {
 import useJourneyMode from "../../journey/useJourneyMode";
 import { setCanvasUnavailable } from "../../scroll/canvasStatus";
 
-const CLEAR_COLOR = "#050816";
+const CLEAR_COLOR = "#01030a";
 const REDUCED_QUERY = "(prefers-reduced-motion: reduce)";
 const DECLINE_RATIO = 0.6;
 const DECLINE_FLOOR = 8000;
@@ -24,6 +25,22 @@ const CONTEXT_FALLBACK_MS = 2000;
 // 항해 중 카메라가 작은 행성(반지름 0.085)에 0.82까지 다가가므로 near를 낮춘다.
 const CAMERA = { fov: 60, near: 0.02, far: 300, position: [0, 0, 13] };
 const GL = { alpha: false, antialias: false, powerPreference: "high-performance" };
+// 첫 프레임을 그린 뒤 canvas를 서서히 드러낸다(아래 StaticGalaxy에서 자연스럽게 넘어가게).
+const FADE_IN = "opacity 0.8s ease";
+
+// 첫 렌더(후처리 패스 이후, 우선순위 2) 다음 rAF에서 투명도를 올린다. visibility(컨텍스트 손실)와는 별개다.
+const FirstFrameReveal = () => {
+  const gl = useThree((state) => state.gl);
+  const shown = useRef(false);
+  useFrame(() => {
+    if (shown.current) return;
+    shown.current = true;
+    window.requestAnimationFrame(() => {
+      gl.domElement.style.opacity = "1";
+    });
+  }, 2);
+  return null;
+};
 
 // 마운트 시 1회만 정한다. 리사이즈로 버퍼를 다시 만들지 않는다.
 const pickParticleCount = () => {
@@ -40,9 +57,18 @@ const subscribeReduced = (cb) => {
 };
 const getReduced = () => window.matchMedia(REDUCED_QUERY).matches;
 
+// 후처리(블룸 등)는 픽셀 수에 비례해 비싸다. 큰 고해상도 화면에서는 렌더 픽셀 수에 상한을 둔다.
+const PIXEL_BUDGET = 3_600_000;
+const MAX_DPR = 1.5;
+const pickMaxDpr = () => {
+  const area = Math.max(1, window.innerWidth * window.innerHeight);
+  return Math.min(MAX_DPR, Math.max(1, Math.sqrt(PIXEL_BUDGET / area)));
+};
+
 const GalaxyCanvas = () => {
   const [baseCount] = useState(pickParticleCount);
   const [degraded, setDegraded] = useState(false);
+  const [maxDpr, setMaxDpr] = useState(pickMaxDpr);
   const [contextLost, setContextLost] = useState(false);
   const [monitorReady, setMonitorReady] = useState(false);
   const paused = useSyncExternalStore(subscribeMotionPaused, getMotionPaused);
@@ -56,6 +82,12 @@ const GalaxyCanvas = () => {
     () => ({ uTime: { value: 0 }, uDim: { value: 1 } }),
     []
   );
+
+  useEffect(() => {
+    const onResize = () => setMaxDpr(pickMaxDpr());
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   const frameloop = contextLost
     ? "never"
@@ -114,6 +146,9 @@ const GalaxyCanvas = () => {
 
   const handleCreated = ({ gl, invalidate }) => {
     gl.setClearColor(CLEAR_COLOR, 1);
+    gl.domElement.style.opacity = "0";
+    // 모션 줄이기에서는 바로 보인다.
+    gl.domElement.style.transition = reduced ? "none" : FADE_IN;
     invalidateRef.current = invalidate;
     setCanvas(gl.domElement);
   };
@@ -123,7 +158,7 @@ const GalaxyCanvas = () => {
       style={{ position: "absolute", inset: 0, pointerEvents: "none" }}
       camera={CAMERA}
       frameloop={frameloop}
-      dpr={degraded ? 1 : [1, 1.5]}
+      dpr={degraded ? 1 : [1, maxDpr]}
       gl={GL}
       onCreated={handleCreated}
     >
@@ -133,6 +168,8 @@ const GalaxyCanvas = () => {
       <Galaxy uniforms={uniforms} baseCount={baseCount} count={count} />
       {journeyOn && <PlanetSystem uniforms={uniforms} />}
       <CameraRig uniforms={uniforms} />
+      <PostEffects uniforms={uniforms} degraded={degraded} />
+      <FirstFrameReveal />
     </Canvas>
   );
 };

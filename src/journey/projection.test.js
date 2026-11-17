@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { samplePose } from "../scroll/galaxyPose";
 import {
   JOURNEY_FOV,
+  JOURNEY_STEPPER,
   JOURNEY_VIEWS,
   createJourneyLayout,
   itemOffset,
@@ -125,5 +126,37 @@ describe("항해 화면 배치(체류 중, 시간 0)", () => {
     const { planet } = dwellAt(1440, 900, "wide", 2, 3);
     expect(planet.x / 1440).toBeCloseTo(0.3, 6);
     expect(planet.y / 900).toBeCloseTo(0.52, 6);
+  });
+
+  it("이전/다음 버튼은 패널·MotionToggle·위성 라벨과 겹치지 않는다", () => {
+    // 좁은 화면: 패널 영역 아래 64px 띠 안, MotionToggle(오른쪽 16px, 44px) 왼쪽
+    [
+      [390, 844],
+      [390, 664],
+      [360, 640],
+    ].forEach(([width, height]) => {
+      const top = height - JOURNEY_STEPPER.bottomNarrow - JOURNEY_STEPPER.height;
+      expect(top).toBeGreaterThanOrEqual(height - 64);
+      expect(16 + JOURNEY_STEPPER.width).toBeLessThan(width - 16 - 44);
+    });
+    // 넓은·중간 화면: 행성 아래 가운데. 패널 왼쪽보다 왼쪽, 화면 안, 앞 위성 라벨(최대 높이 64px)보다 아래
+    [
+      [855, 613, "mid"],
+      [800, 1000, "mid"],
+      [1023, 700, "mid"],
+      [1024, 640, "wide"],
+      [1440, 900, "wide"],
+      [1920, 1080, "wide"],
+    ].forEach(([width, height, view]) => {
+      const center = (0.5 + JOURNEY_VIEWS[view].shift.x) * width;
+      expect(center - JOURNEY_STEPPER.width / 2).toBeGreaterThan(0);
+      expect(center + JOURNEY_STEPPER.width / 2).toBeLessThan(JOURNEY_VIEWS[view].panelLeft * width);
+      const top = height - JOURNEY_STEPPER.bottomSide - JOURNEY_STEPPER.height;
+      everyItem((c, j) => {
+        const { planet, front } = dwellAt(width, height, view, c, j);
+        expect(front.y + front.r + LABEL_TOP + 64).toBeLessThan(top);
+        expect(planet.y + planet.r).toBeLessThan(top);
+      });
+    });
   });
 });

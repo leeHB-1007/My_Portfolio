@@ -1,11 +1,22 @@
 import { POSE_KEYS, samplePose } from "./galaxyPose";
 import {
   ITEM_TARGET_U,
+  STOP_TOLERANCE,
+  findStop,
   itemOffset,
+  journeyStops,
   sampleJourney,
   panelState,
 } from "./journeyPose";
 import { createPlanets } from "../journey/planets";
+import {
+  STEP_TIMING,
+  createGlide,
+  glideAt,
+  glideVelocity,
+  stepDuration,
+  stopAt,
+} from "./stepMotion";
 
 const EPSILON = 1e-3;
 const CSS_STEP = 0.001;
@@ -35,6 +46,8 @@ export const rig = {
   wide: false,
   // 항해 화면 구성: "wide" | "mid" | "narrow"(journeyPose의 JOURNEY_VIEWS)
   journeyView: "narrow",
+  // 일반 섹션 모드에서 마지막 장면(Contact)으로 바뀌기 시작하는 스크롤 위치(없으면 null)
+  outroStart: null,
   maxScroll: 0,
   aspect: 1,
   scrollY: 0,
@@ -47,7 +60,8 @@ export const rig = {
   // 은하 셰이더의 uTime. CameraRig가 매 프레임 기록한다.
   time: 0,
   // 항해 상태: { start, end, measured, layout, planets, index, phase, t, item, u, s, ring,
-  //   count(현재 챕터 위성 수), active, panel(보이는 챕터 패널|null), cardAnchor({ x, y }) }
+  //   count(현재 챕터 위성 수), active, panel(보이는 챕터 패널|null), cardAnchor({ x, y }),
+  //   progress(트랙 전체 진행도 0~1), past(트랙 끝을 지났는지), hover(마우스·포커스가 올라간 위성 id|null) }
   journey: null,
   subscribe: (cb) => {
     subscribers.add(cb);
@@ -114,6 +128,12 @@ const installDebug = () => {
     planetScreen: () => galaxyDebug.planetScreen(),
     satelliteScreens: () => galaxyDebug.satelliteScreens(),
     frontScreen: () => galaxyDebug.frontScreen(),
+    // 이전(-1)/다음(+1) 정지점으로 이동(버튼·방향키와 같은 동작)
+    step: (direction) => stepJourney(direction),
+    // 넘기기 스크롤 보간 중인지
+    get stepping() {
+      return glide !== null;
+    },
   };
 };
 
@@ -132,6 +152,7 @@ export const computeTarget = (time = rig.time) =>
     journey: rig.journey && rig.journey.measured ? rig.journey : null,
     time,
     shiftTime: rig.journey ? rig.journey.shiftTime : time,
+    outroStart: rig.outroStart,
   });
 
 const journeyUnit = (journey) =>
@@ -153,17 +174,49 @@ const writeGroup = (group, list) => {
 const writeK = (group, index, k) => {
   const element = group.elements[index];
   if (!element || !shouldWrite(group.values[index], k)) return;
+  const wasOn = group.values[index] > 0;
   group.values[index] = k;
   element.style.setProperty("--k", k.toFixed(3));
+  // 보이는 요소에만 data-on을 단다. CSS가 이 속성이 있을 때만 transform을 걸어,
+  // 보이지 않는 본문 수십 개가 합성 레이어로 올라가지 않게 한다.
+  if (k > 0 !== wasOn) element.toggleAttribute("data-on", k > 0);
 };
 
-const createGroup = (elements) => ({
-  elements,
-  values: new Array(elements.length).fill(null),
-  visible: new Set(),
-});
+// 모든 요소에 --k: 0을 먼저 써 둔다. rig가 아직 값을 쓰지 않은 요소가 조상(패널)의 --k를
+// 상속해 보이는 일을 막는다(챕터 중간으로 바로 이동하면 도착 안내가 한 번도 쓰이지 않는다).
+const createGroup = (elements) => {
+  elements.forEach((element) => element.style.setProperty("--k", "0.000"));
+  return {
+    elements,
+    values: new Array(elements.length).fill(0),
+    visible: new Set(),
+  };
+};
 
-// 반환값: 챕터·단계·위성이 바뀌었는지
+const smoothRange = (from, to, value) => {
+  const t = Math.min(Math.max((value - from) / (to - from), 0), 1);
+  return t * t * (3 - 2 * t);
+};
+
+// 챕터 인터스티셜(이동 구간 가운데에 뜨는 큰 챕터 제목)의 투명도
+const titleK = (t) => smoothRange(0.12, 0.3, t) * (1 - smoothRange(0.6, 0.8, t));
+
+// Navbar 아래 진행 선(X의 [data-journey-progress] 요소)에 transform만 쓴다.
+// 문서 루트·스테이지에 CSS 변수로 쓰면 하위 전체 스타일이 다시 계산된다.
+const writeProgress = (progress) => {
+  let element = journeyEls.progressElement;
+  if (!element || !element.isConnected) {
+    element = document.querySelector("[data-journey-progress]");
+    journeyEls.progressElement = element;
+    journeyEls.progress = null;
+  }
+  if (!element) return;
+  if (journeyEls.progress !== null && Math.abs(journeyEls.progress - progress) < 0.002) return;
+  journeyEls.progress = progress;
+  element.style.transform = `scaleX(${progress.toFixed(4)})`;
+};
+
+// 반환값: 구독자에게 알릴 변화(챕터·단계·위성, 항해 안팎, 트랙 끝 통과)가 있었는지
 const updateJourney = (scrollY) => {
   const journey = rig.journey;
   if (!journey || !journeyEls || !journey.measured) return false;
@@ -191,15 +244,26 @@ const updateJourney = (scrollY) => {
     Math.abs(state.ring - journey.ring) > EPSILON ||
     Math.abs(state.t - journey.t) > EPSILON;
   const shownPanel = panels.panels.find((entry) => entry.k >= 0.5);
+  const active = scrollY >= journey.start && scrollY <= journey.end;
+  const past = scrollY > journey.end;
+  const crossed = active !== journey.active || past !== journey.past;
+  const progress = Math.min(Math.max(distance / journey.layout.total, 0), 1);
   Object.assign(journey, state, {
     count: journey.layout.segments[state.index].count,
-    active: scrollY >= journey.start && scrollY <= journey.end,
+    active,
+    past,
+    progress,
     panel: shownPanel ? shownPanel.index : null,
   });
+  writeProgress(progress);
 
   writeGroup(journeyEls.panels, panels.panels);
   writeGroup(journeyEls.items, panels.items);
   writeGroup(journeyEls.hints, panels.hints);
+  writeGroup(
+    journeyEls.titles,
+    state.phase === "travel" ? [{ index: state.index, k: titleK(state.t) }] : []
+  );
   if (journey.panel !== journeyEls.activePanel) {
     const { elements } = journeyEls.panels;
     if (journeyEls.activePanel !== null) {
@@ -210,6 +274,11 @@ const updateJourney = (scrollY) => {
   }
 
   const { stage } = journeyEls;
+  // X가 이동 중 행성 이름표("NEXT")·인터스티셜을 CSS로 바꾸는 데 쓴다(값이 바뀔 때만 쓴다).
+  if (state.phase !== journeyEls.phase) {
+    journeyEls.phase = state.phase;
+    stage.setAttribute("data-journey-phase", state.phase);
+  }
   // 연결선은 현재 위성 본문의 투명도를 따른다.
   const current =
     state.phase === "item"
@@ -241,10 +310,118 @@ const updateJourney = (scrollY) => {
     rig.settled = false;
     invalidateFn();
   }
-  return changed;
+  return changed || crossed;
 };
 
-// 전체 항목 번호 index의 위성으로 스크롤한다(라벨 클릭·키보드 포커스).
+// 위성 라벨·목차에 마우스·포커스가 올라간 위성(item id, 없으면 null). PlanetSystem이 그 위성을 강조한다.
+export const setJourneyHover = (itemId) => {
+  const journey = rig.journey;
+  if (!journey) return;
+  const next = itemId === undefined ? null : itemId;
+  if (journey.hover === next) return;
+  journey.hover = next;
+  if (invalidateFn) {
+    rig.settled = false;
+    invalidateFn();
+  }
+};
+
+// ---- 넘기기 스크롤 보간 ----
+// 버튼·방향키·라벨·목차로 넘길 때는 rig가 rAF로 직접 스크롤한다(stepMotion의 시간·곡선).
+// 사용자가 직접 스크롤(휠·터치·스크롤바·스크롤 키)하면 즉시 멈춘다.
+let glide = null;
+const CANCEL_KEYS = new Set([
+  "ArrowUp",
+  "ArrowDown",
+  "PageUp",
+  "PageDown",
+  "Home",
+  "End",
+  " ",
+  "Spacebar",
+]);
+
+const stopGlide = () => {
+  if (!glide) return;
+  window.cancelAnimationFrame(glide.frame);
+  window.removeEventListener("wheel", stopGlide);
+  window.removeEventListener("touchstart", stopGlide);
+  window.removeEventListener("pointerdown", onGlidePointer);
+  window.removeEventListener("keydown", onGlideKey);
+  glide = null;
+};
+
+// 버튼(이전/다음·라벨·목차) 위의 누름은 넘기기를 이어 가는 입력이라 멈추지 않는다.
+// 링크(Navbar 앵커 등)·스크롤바 드래그·그 밖의 누름은 사용자가 직접 움직이는 것으로 보고 멈춘다.
+function onGlidePointer(event) {
+  if (event.target instanceof Element && event.target.closest("button")) return;
+  stopGlide();
+}
+
+function onGlideKey(event) {
+  if (CANCEL_KEYS.has(event.key)) stopGlide();
+}
+
+const glideFrame = () => {
+  if (!glide) return;
+  const elapsed = (performance.now() - glide.start) / 1000;
+  // 탭이 숨겨져 rAF가 멈췄다가 돌아오면 elapsed가 커져 바로 끝 위치로 맞춰진다.
+  window.scrollTo({ top: glideAt(glide.curve, elapsed), behavior: "instant" });
+  if (elapsed >= glide.curve.duration) {
+    stopGlide();
+    return;
+  }
+  glide.frame = window.requestAnimationFrame(glideFrame);
+};
+
+// target(px)까지 duration(초) 동안 보간한다. 같은 방향으로 가던 중이면 그 속도를 이어받는다.
+const glideTo = (target, duration, { direction, index }) => {
+  const now = performance.now();
+  const from = window.scrollY;
+  let velocity = 0;
+  if (glide && glide.direction === direction) {
+    velocity = glideVelocity(glide.curve, (now - glide.start) / 1000);
+  }
+  const curve = createGlide({ from, to: target, duration, velocity });
+  if (!glide) {
+    window.addEventListener("wheel", stopGlide, { passive: true });
+    window.addEventListener("touchstart", stopGlide, { passive: true });
+    window.addEventListener("pointerdown", onGlidePointer, { passive: true });
+    window.addEventListener("keydown", onGlideKey);
+  } else {
+    window.cancelAnimationFrame(glide.frame);
+  }
+  glide = { curve, start: now, direction, index, frame: 0 };
+  glide.frame = window.requestAnimationFrame(glideFrame);
+};
+
+const remainingOf = (current) =>
+  current ? Math.max(0, current.curve.duration - (performance.now() - current.start) / 1000) : 0;
+
+const stopPositions = (journey) => {
+  const unit = journeyUnit(journey);
+  const stops = journeyStops(journey.layout);
+  return {
+    unit,
+    stops,
+    positions: stops.map((stop) => journey.start + stop.at * unit),
+    tolerance: STOP_TOLERANCE * unit,
+  };
+};
+
+// 정지점 번호(-1 Hero, stops.length Contact)의 스크롤 위치
+const stopTarget = (positions, index) => {
+  if (index < 0) return rig.heroStart;
+  if (index >= positions.length) {
+    const contact = document.getElementById("contact");
+    return contact ? contact.getBoundingClientRect().top + window.scrollY : rig.maxScroll;
+  }
+  return positions[index];
+};
+
+const clampScroll = (value) => Math.max(0, Math.min(Math.round(value), rig.maxScroll));
+
+// 전체 항목 번호 index의 위성으로 보간해 이동한다(라벨·목차 클릭, 키보드 포커스).
 export const scrollToJourneyItem = (index) => {
   const journey = rig.journey;
   if (!journey || !journey.measured) return;
@@ -252,8 +429,58 @@ export const scrollToJourneyItem = (index) => {
     (entry) => index >= entry.firstItem && index < entry.firstItem + entry.count
   );
   if (!segment) return;
-  const offset = itemOffset(segment, index - segment.firstItem, ITEM_TARGET_U);
-  window.scrollTo({ top: journey.start + offset * journeyUnit(journey) });
+  const { unit, stops, positions, tolerance } = stopPositions(journey);
+  const stopIndex = segment.index + index + 1;
+  const target = clampScroll(
+    journey.start + itemOffset(segment, index - segment.firstItem, ITEM_TARGET_U) * unit
+  );
+  const from = stopAt(positions, window.scrollY, tolerance);
+  const duration = stepDuration({
+    from,
+    to: stopIndex,
+    stops,
+    distance: unit > 0 ? (target - window.scrollY) / unit : 0,
+  });
+  glideTo(target, duration, { direction: Math.sign(target - window.scrollY), index: stopIndex });
+};
+
+// 이전(-1)/다음(+1) 정지점으로 보간해 이동한다.
+// 첫 정지점에서 이전 → Hero 맨 위, 마지막 정지점에서 다음 → Contact. 반환: 이동했는지
+export const stepJourney = (direction) => {
+  const journey = rig.journey;
+  if (!journey || !journey.measured || !direction) return false;
+  const dir = Math.sign(direction);
+  const { unit, stops, positions, tolerance } = stopPositions(journey);
+  const scrollY = window.scrollY;
+  const continuing = glide !== null && glide.direction === dir;
+
+  // 같은 방향으로 가던 중이면 가고 있던 목표를 기준으로 한 칸 더 간다.
+  let from = stopAt(positions, scrollY, tolerance);
+  let reference = scrollY;
+  if (continuing) {
+    from = glide.index;
+    reference = stopTarget(positions, glide.index);
+  }
+  const found = findStop(positions, reference, dir, tolerance);
+  const index = found >= 0 ? found : dir > 0 ? positions.length : -1;
+  if (continuing && index === glide.index) return false;
+  // 키를 누르고 있어도 지금 위치보다 maxAhead칸 넘게 앞서 쌓이지 않게 한다.
+  if (continuing) {
+    const here = stopAt(positions, scrollY, Infinity);
+    if (here !== null && Math.abs(index - here) > STEP_TIMING.maxAhead) return false;
+  }
+
+  const target = clampScroll(stopTarget(positions, index));
+  const base = stepDuration({
+    from,
+    to: index,
+    stops,
+    distance: unit > 0 ? (target - reference) / unit : 0,
+  });
+  // 이어 갈 때는 남은 시간의 절반을 더해 처음부터 다시 가속하지 않고 자연스럽게 이어지게 한다.
+  const duration = continuing ? base + remainingOf(glide) * 0.5 : base;
+  glideTo(target, duration, { direction: dir, index });
+  return true;
 };
 
 const chapterOf = (index) =>
@@ -295,8 +522,18 @@ const measureCardAnchor = (region, side) =>
     ? { x: region.offsetLeft, y: region.offsetTop + region.offsetHeight / 2 }
     : { x: region.offsetLeft + region.offsetWidth / 2, y: region.offsetTop };
 
-// panels: 챕터 패널, items: 항목 순서의 본문, hints: 챕터별 도착 안내, region: 패널 영역
-export const attachJourney = ({ track, stage, panels, items, hints, region, layout }) => {
+// panels: 챕터 패널, items: 항목 순서의 본문, hints: 챕터별 도착 안내, region: 패널 영역,
+// titles: 챕터별 인터스티셜(없을 수 있음)
+export const attachJourney = ({
+  track,
+  stage,
+  panels,
+  items,
+  hints,
+  titles = [],
+  region,
+  layout,
+}) => {
   const own = {
     track,
     stage,
@@ -304,6 +541,10 @@ export const attachJourney = ({ track, stage, panels, items, hints, region, layo
     panels: createGroup(panels),
     items: createGroup(items),
     hints: createGroup(hints),
+    titles: createGroup(titles),
+    phase: null,
+    progressElement: null,
+    progress: null,
     activePanel: null,
     lineK: null,
     labels: null,
@@ -325,6 +566,9 @@ export const attachJourney = ({ track, stage, panels, items, hints, region, layo
     ring: 0,
     count: layout.segments.length ? layout.segments[0].count : 0,
     active: false,
+    past: false,
+    progress: 0,
+    hover: null,
     panel: null,
     cardAnchor: { x: 0, y: 0 },
     shiftTime: rig.time,
@@ -392,6 +636,9 @@ export const mountScrollRig = ({ track, stage }) => {
       0,
       document.documentElement.scrollHeight - window.innerHeight
     );
+    // Contact가 아래에서 들어오기 시작할 때(위 끝이 화면 아래에 닿을 때)부터 마지막 장면으로 바꾼다.
+    const contact = document.getElementById("contact");
+    const outroStart = contact ? contact.getBoundingClientRect().top + scrollY - vh : null;
     const journey = journeyEls ? rig.journey : null;
     let journeyStart = 0;
     let journeyEnd = 0;
@@ -411,6 +658,7 @@ export const mountScrollRig = ({ track, stage }) => {
       wide !== rig.wide ||
       journeyView !== rig.journeyView ||
       maxScroll !== rig.maxScroll ||
+      outroStart !== rig.outroStart ||
       (journey !== null &&
         (!journey.measured ||
           journeyStart !== journey.start ||
@@ -437,6 +685,7 @@ export const mountScrollRig = ({ track, stage }) => {
       wide,
       journeyView,
       maxScroll,
+      outroStart,
       aspect: vh > 0 ? width / vh : 1,
       measured: true,
     });
