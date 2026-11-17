@@ -10,6 +10,7 @@ import {
   stopIndexOf,
 } from "../../scroll/journeyPose";
 import { attachJourney, rig, stepJourney } from "../../scroll/scrollRig";
+import { STEP_KEY_REPEAT_MS } from "../../scroll/stepMotion";
 import JourneyGuide from "./JourneyGuide";
 import JourneyLabels from "./JourneyLabels";
 import JourneyPanel from "./JourneyPanel";
@@ -20,7 +21,7 @@ import JourneyTitles from "./JourneyTitles";
 const anchors = journeyAnchors(journeyLayout);
 const stopCount = journeyStops(journeyLayout).length;
 // 키를 누르고 있을 때 반복 입력은 이 간격(ms)마다 한 번만 넘긴다.
-const KEY_REPEAT_MS = 450;
+const KEY_REPEAT_MS = STEP_KEY_REPEAT_MS;
 const EDITABLE = "input, textarea, select, [contenteditable]:not([contenteditable='false'])";
 // 패널 영역 위치는 투영 테스트와 같은 상수(JOURNEY_VIEWS)를 CSS 변수로 넘긴다.
 const panelRegionStyle = {
@@ -154,7 +155,6 @@ const Journey = () => {
         <div ref={tagRef} className="journey-planet-tag" aria-hidden="true">
           <span className="journey-planet-tag-ring" />
           <span className="journey-planet-tag-caption">
-            <span className="journey-planet-tag-next">Next</span>
             <span className="journey-planet-tag-number">
               {String(chapter.index + 1).padStart(2, "0")}
             </span>

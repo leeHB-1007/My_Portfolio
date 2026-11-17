@@ -13,7 +13,7 @@ const MotionToggle = () => {
   return (
     <button
       type="button"
-      className="motion-toggle fixed bottom-4 right-4 z-30 flex h-11 w-11 items-center justify-center rounded-full border border-white/15 bg-primary/80 text-white backdrop-blur hover:border-[#915EFF]"
+      className="motion-toggle fixed bottom-4 right-4 z-30 flex h-11 w-11 items-center justify-center rounded-full border border-white/15 bg-primary/80 text-white hover:border-[#915EFF]"
       aria-label="배경 모션 일시정지"
       aria-pressed={paused}
       title="배경 모션 일시정지"

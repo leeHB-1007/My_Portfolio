@@ -13,7 +13,8 @@ import { rotateByTime } from "../../journey/planets";
 import { GALAXY_RADIUS } from "./galaxyGeometry";
 
 const EPSILON = 1e-3;
-const SMOOTH_TIME = 0.25;
+// 카메라 목표는 이미 지연 보간된 스크롤(smoothY)로 계산되므로 damp는 짧게 둔다(이중 지연 방지).
+const SMOOTH_TIME = 0.12;
 const MAX_DELTA = 1 / 30;
 const KEYS = [
   "radius",

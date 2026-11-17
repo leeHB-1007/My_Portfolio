@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { createJourneyLayout, journeyStops } from "./journeyPose";
+import { STOP_TOLERANCE, createJourneyLayout, journeyStops } from "./journeyPose";
 import {
+  SNAP_TIMING,
   STEP_TIMING,
+  snapDuration,
+  snapIntent,
+  snapTargetIndex,
   createGlide,
   glideAt,
   glideVelocity,
@@ -110,5 +114,88 @@ describe("stopAt", () => {
     expect(stopAt(positions, (positions[4] + positions[5]) / 2, 0.05)).toBeNull();
     expect(stopAt(positions, -1, 0.05)).toBe(-1);
     expect(stopAt(positions, layout.total + 1, 0.05)).toBe(positions.length);
+  });
+});
+
+describe("정착(스냅)", () => {
+  const positions = stops.map((stop) => stop.at);
+  const bounds = { start: 0, end: layout.total };
+  const tolerance = STOP_TOLERANCE;
+
+  it("가장 가까운 정지점으로, 이미 근처면 움직이지 않는다", () => {
+    const between = positions[4] + (positions[5] - positions[4]) * 0.3;
+    expect(snapTargetIndex(positions, between, tolerance, bounds)).toBe(4);
+    const later = positions[4] + (positions[5] - positions[4]) * 0.7;
+    expect(snapTargetIndex(positions, later, tolerance, bounds)).toBe(5);
+    expect(snapTargetIndex(positions, positions[4] + 0.03, tolerance, bounds)).toBe(-1);
+  });
+
+  it("이동 구간 한가운데서는 이전 챕터 마지막 또는 다음 챕터 도착 중 가까운 쪽", () => {
+    const lastOfFirst = positions[5];
+    const nextArrive = positions[6];
+    const nearPrevious = lastOfFirst + (nextArrive - lastOfFirst) * 0.4;
+    const nearNext = lastOfFirst + (nextArrive - lastOfFirst) * 0.6;
+    expect(snapTargetIndex(positions, nearPrevious, tolerance, bounds)).toBe(5);
+    expect(snapTargetIndex(positions, nearNext, tolerance, bounds)).toBe(6);
+  });
+
+  it("트랙 밖(Hero·Contact)과 트랙 시작·끝이 더 가까운 곳에서는 정착하지 않는다", () => {
+    expect(snapTargetIndex(positions, -0.5, tolerance, bounds)).toBe(-1);
+    expect(snapTargetIndex(positions, layout.total + 0.5, tolerance, bounds)).toBe(-1);
+    expect(snapTargetIndex(positions, 0.1, tolerance, bounds)).toBe(-1);
+    expect(snapTargetIndex(positions, layout.total - 0.05, tolerance, bounds)).toBe(-1);
+  });
+
+  it("스크롤한 방향이 있으면 가깝지 않아도 그 방향의 다음 정지점으로", () => {
+    const justPast = positions[4] + (positions[5] - positions[4]) * 0.3;
+    expect(snapTargetIndex(positions, justPast, tolerance, bounds, 1)).toBe(5);
+    expect(snapTargetIndex(positions, justPast, tolerance, bounds, -1)).toBe(4);
+    // 챕터 사이 이동 구간에서도 같다.
+    const leaving = positions[5] + (positions[6] - positions[5]) * 0.2;
+    expect(snapTargetIndex(positions, leaving, tolerance, bounds, 1)).toBe(6);
+    expect(snapTargetIndex(positions, leaving, tolerance, bounds, -1)).toBe(5);
+    // 이미 정지점 근처면 방향이 있어도 움직이지 않는다.
+    expect(snapTargetIndex(positions, positions[4] + 0.03, tolerance, bounds, 1)).toBe(-1);
+  });
+
+  it("방향 쪽에 정지점이 없으면(Hero·Contact로 나가는 중) 정착하지 않는다", () => {
+    const last = positions[positions.length - 1];
+    expect(snapTargetIndex(positions, positions[0] - 0.3, tolerance, bounds, -1)).toBe(-1);
+    expect(snapTargetIndex(positions, positions[0] - 0.3, tolerance, bounds, 1)).toBe(0);
+    const afterLast = (last + layout.total) / 2;
+    expect(afterLast - last).toBeGreaterThan(tolerance);
+    expect(snapTargetIndex(positions, afterLast, tolerance, bounds, 1)).toBe(-1);
+    expect(snapTargetIndex(positions, afterLast, tolerance, bounds, -1)).toBe(positions.length - 1);
+    expect(snapTargetIndex(positions, -0.5, tolerance, bounds, 1)).toBe(-1);
+  });
+
+  it("스크롤이 없었으면 정착하지 않고, 움직였으면 마지막 방향을, 제자리면 방향 없음을 돌려준다", () => {
+    // 탭·클릭·빈 휠만 있었던 경우
+    expect(snapIntent(null, 500, 1)).toBeNull();
+    expect(snapIntent(500, 500 + SNAP_TIMING.minMove + 1, 1)).toBe(1);
+    expect(snapIntent(500, 500 - 40, -1)).toBe(-1);
+    // 아래로 많이 갔다가 조금 되돌린 경우: 마지막 방향(위)을 따른다.
+    expect(snapIntent(500, 900, -1)).toBe(-1);
+    expect(snapIntent(500, 500 + SNAP_TIMING.minMove, 1)).toBe(0);
+  });
+
+  it("방향키 두 번(정지점에서 tolerance 밖으로 조금 벗어남)이면 되돌아가지 않고 다음 정지점으로", () => {
+    // minMove가 px 단위이므로 화면 높이 900px 기준의 px 위치로 계산한다.
+    const vh = 900;
+    const px = positions.map((value) => value * vh);
+    const pxTolerance = tolerance * vh;
+    const pxBounds = { start: 0, end: layout.total * vh };
+    const first = px[4] + 40;
+    const second = px[4] + 80;
+    expect(40).toBeLessThan(pxTolerance);
+    expect(80).toBeGreaterThan(pxTolerance);
+    expect(snapTargetIndex(px, first, pxTolerance, pxBounds, snapIntent(px[4], first, 1))).toBe(-1);
+    expect(snapTargetIndex(px, second, pxTolerance, pxBounds, snapIntent(first, second, 1))).toBe(5);
+  });
+
+  it("정착 시간은 거리에 비례하되 짧으면 최소, 길면 최대", () => {
+    expect(snapDuration(0.01)).toBe(SNAP_TIMING.min);
+    expect(snapDuration(0.5)).toBeCloseTo(0.5 * SNAP_TIMING.perUnit, 9);
+    expect(snapDuration(-5)).toBe(SNAP_TIMING.max);
   });
 });

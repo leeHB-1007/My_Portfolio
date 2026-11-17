@@ -10,13 +10,19 @@ import {
 } from "./journeyPose";
 import { createPlanets } from "../journey/planets";
 import {
+  SNAP_ENABLED,
+  SNAP_TIMING,
   STEP_TIMING,
   createGlide,
   glideAt,
   glideVelocity,
+  snapDuration,
+  snapIntent,
+  snapTargetIndex,
   stepDuration,
   stopAt,
 } from "./stepMotion";
+import { SMOOTH_SCROLL, decayLag, followScroll, shouldJumpScroll } from "./smoothScroll";
 
 const EPSILON = 1e-3;
 const CSS_STEP = 0.001;
@@ -50,7 +56,11 @@ export const rig = {
   outroStart: null,
   maxScroll: 0,
   aspect: 1,
+  // 장면 계산에 쓰는 스크롤 위치(= smoothY). 실제 위치는 rawY.
   scrollY: 0,
+  // 실제 window.scrollY와, 그것을 지연 보간한 값(smoothScroll)
+  rawY: 0,
+  smoothY: 0,
   heroP: 0,
   measured: false,
   target: null,
@@ -133,6 +143,10 @@ const installDebug = () => {
     // 넘기기 스크롤 보간 중인지
     get stepping() {
       return glide !== null;
+    },
+    // 멈춘 뒤 가까운 정지점으로 정착 보간 중인지
+    get snapping() {
+      return glide !== null && glide.kind === "snap";
     },
   };
 };
@@ -274,7 +288,7 @@ const updateJourney = (scrollY) => {
   }
 
   const { stage } = journeyEls;
-  // X가 이동 중 행성 이름표("NEXT")·인터스티셜을 CSS로 바꾸는 데 쓴다(값이 바뀔 때만 쓴다).
+  // 이동 중 행성 이름표(글자 숨김 + 점선 원)·인터스티셜을 CSS로 바꾸는 데 쓴다(값이 바뀔 때만 쓴다).
   if (state.phase !== journeyEls.phase) {
     journeyEls.phase = state.phase;
     stage.setAttribute("data-journey-phase", state.phase);
@@ -300,7 +314,8 @@ const updateJourney = (scrollY) => {
     stage.toggleAttribute("data-labels-on", labels >= 0.5);
   }
   // 챕터 점은 첫 행성에 다가갈 때 나타난다.
-  const hud = state.index === 0 ? labels : 1;
+  // 트랙을 지난 뒤(Contact)에는 넘기기 버튼·챕터 점을 숨긴다.
+  const hud = past ? 0 : state.index === 0 ? labels : 1;
   if (shouldWrite(journeyEls.hud, hud)) {
     journeyEls.hud = hud;
     stage.style.setProperty("--hud", hud.toFixed(3));
@@ -330,6 +345,10 @@ export const setJourneyHover = (itemId) => {
 // 버튼·방향키·라벨·목차로 넘길 때는 rig가 rAF로 직접 스크롤한다(stepMotion의 시간·곡선).
 // 사용자가 직접 스크롤(휠·터치·스크롤바·스크롤 키)하면 즉시 멈춘다.
 let glide = null;
+// 마지막 보간이 마지막으로 쓴 스크롤 위치. 보간이 끝난 뒤 늦게 오는 그 위치의 scroll 이벤트를 가려내는 데 쓴다.
+let glideEndY = NaN;
+// 보간 중 스크롤 위치가 직전에 쓴 값에서 이만큼(px) 넘게 달라져 있으면 사용자가 직접 움직인 것으로 본다.
+const GLIDE_DRIFT = 2;
 const CANCEL_KEYS = new Set([
   "ArrowUp",
   "ArrowDown",
@@ -348,6 +367,7 @@ const stopGlide = () => {
   window.removeEventListener("touchstart", stopGlide);
   window.removeEventListener("pointerdown", onGlidePointer);
   window.removeEventListener("keydown", onGlideKey);
+  glideEndY = glide.lastY === null ? NaN : glide.lastY;
   glide = null;
 };
 
@@ -364,9 +384,16 @@ function onGlideKey(event) {
 
 const glideFrame = () => {
   if (!glide) return;
+  // 입력 이벤트로 잡히지 않는 직접 스크롤(스크롤바 드래그, 관성 스크롤, 보조기술)과 싸우지 않는다.
+  if (glide.lastY !== null && Math.abs(window.scrollY - glide.lastY) > GLIDE_DRIFT) {
+    stopGlide();
+    return;
+  }
   const elapsed = (performance.now() - glide.start) / 1000;
   // 탭이 숨겨져 rAF가 멈췄다가 돌아오면 elapsed가 커져 바로 끝 위치로 맞춰진다.
   window.scrollTo({ top: glideAt(glide.curve, elapsed), behavior: "instant" });
+  // 문서 끝에서 잘리거나 반올림된 실제 값을 기억한다.
+  glide.lastY = window.scrollY;
   if (elapsed >= glide.curve.duration) {
     stopGlide();
     return;
@@ -375,10 +402,10 @@ const glideFrame = () => {
 };
 
 // target(px)까지 duration(초) 동안 보간한다. 같은 방향으로 가던 중이면 그 속도를 이어받는다.
-const glideTo = (target, duration, { direction, index }) => {
+const glideTo = (target, duration, { direction, index, kind = "step", startSpeed = 0 }) => {
   const now = performance.now();
   const from = window.scrollY;
-  let velocity = 0;
+  let velocity = duration > 0 ? (startSpeed * (target - from)) / duration : 0;
   if (glide && glide.direction === direction) {
     velocity = glideVelocity(glide.curve, (now - glide.start) / 1000);
   }
@@ -391,7 +418,7 @@ const glideTo = (target, duration, { direction, index }) => {
   } else {
     window.cancelAnimationFrame(glide.frame);
   }
-  glide = { curve, start: now, direction, index, frame: 0 };
+  glide = { curve, start: now, direction, index, kind, frame: 0, lastY: null };
   glide.frame = window.requestAnimationFrame(glideFrame);
 };
 
@@ -579,6 +606,7 @@ export const attachJourney = ({
   return () => {
     stage.removeEventListener("focusin", onJourneyFocusIn);
     if (journeyEls !== own) return;
+    stopGlide();
     journeyEls = null;
     rig.journey = null;
     if (requestMeasureFn) requestMeasureFn();
@@ -694,8 +722,8 @@ export const mountScrollRig = ({ track, stage }) => {
     return true;
   };
 
-  const update = (measuredChanged) => {
-    const scrollY = window.scrollY;
+  // scrollY: 장면 계산에 쓰는 위치(지연 보간된 smoothY)
+  const update = (measuredChanged, scrollY) => {
     const span = rig.heroEnd - rig.heroStart;
     const heroP =
       span > 0
@@ -740,11 +768,44 @@ export const mountScrollRig = ({ track, stage }) => {
     }
   };
 
+  // 실제 scrollY를 smoothY로 지연 보간해 장면 값을 계산한다. 수렴할 때까지만 rAF를 이어 간다.
+  let smoothY = null;
+  let lastRaw = null;
+  let lastRunAt = 0;
   const run = () => {
     frame = 0;
     const measuredChanged = needsMeasure ? measure() : false;
     needsMeasure = false;
-    update(measuredChanged);
+    const now = performance.now();
+    const raw = window.scrollY;
+    const dt = lastRunAt ? Math.min((now - lastRunAt) / 1000, 0.1) : SMOOTH_SCROLL.frame;
+    // 측정이 바뀌면 px로 정해 둔 보간 목표가 낡으므로 멈춘다.
+    if (measuredChanged) stopGlide();
+    const jump = shouldJumpScroll({
+      first: smoothY === null,
+      remeasured: measuredChanged,
+      previousRaw: lastRaw,
+      raw,
+      vh: rig.vh,
+    });
+    if (jump) {
+      smoothY = raw;
+    } else if (glide) {
+      // 보간은 그대로 따라가고, 보간이 시작될 때 남아 있던 지연만 줄여 간다.
+      smoothY = raw + decayLag(smoothY - lastRaw, dt);
+    } else {
+      smoothY = followScroll(smoothY, raw, dt);
+    }
+    lastRaw = raw;
+    rig.rawY = raw;
+    rig.smoothY = smoothY;
+    update(measuredChanged, smoothY);
+    if (smoothY !== raw) {
+      lastRunAt = now;
+      schedule();
+    } else {
+      lastRunAt = 0;
+    }
   };
 
   const schedule = () => {
@@ -756,7 +817,86 @@ export const mountScrollRig = ({ track, stage }) => {
     schedule();
   };
 
-  const onScroll = () => schedule();
+  // ---- 멈추면 정착 ----
+  // 스크롤 입력(스크롤·휠·키)이 멈추고 idleMs가 지나면 항해 구간 안의 정지점으로 보간한다.
+  // 마지막으로 스크롤한 방향의 다음 정지점으로 가고, 이미 정지점 근처면 움직이지 않는다(snapIntent).
+  // 터치로 누르고 있거나 스크롤바를 끄는 동안, 넘기기 보간 중에는 시작하지 않는다.
+  let snapTimer = 0;
+  let touching = false;
+  let dragging = false;
+  // 이번 스크롤이 시작된 위치(멈춰 있을 때는 null), 마지막 스크롤 방향, 직전 스크롤 위치
+  let snapOrigin = null;
+  let snapDirection = 0;
+  let snapLastY = window.scrollY;
+  const trySnap = () => {
+    snapTimer = 0;
+    if (!SNAP_ENABLED || touching || dragging) return;
+    const origin = snapOrigin;
+    snapOrigin = null;
+    if (glide) return;
+    const journey = rig.journey;
+    if (!journey || !journey.measured || rig.mode !== "pinned") return;
+    const { unit, positions, tolerance } = stopPositions(journey);
+    const raw = window.scrollY;
+    // 스크롤 없이 탭·클릭·빈 휠만 있었으면 화면을 옮기지 않는다.
+    const intent = snapIntent(origin, raw, snapDirection);
+    if (intent === null) return;
+    const index = snapTargetIndex(
+      positions,
+      raw,
+      tolerance,
+      { start: journey.start, end: journey.end },
+      intent
+    );
+    if (index < 0) return;
+    const target = clampScroll(positions[index]);
+    const duration = snapDuration(unit > 0 ? (target - raw) / unit : 0);
+    glideTo(target, duration, {
+      direction: Math.sign(target - raw),
+      index,
+      kind: "snap",
+      startSpeed: SNAP_TIMING.start,
+    });
+  };
+  const armSnap = () => {
+    if (!SNAP_ENABLED) return;
+    if (snapTimer) window.clearTimeout(snapTimer);
+    snapTimer = window.setTimeout(trySnap, SNAP_TIMING.idleMs);
+  };
+  const onTouchStart = () => {
+    touching = true;
+  };
+  // 여러 손가락 중 하나만 뗀 경우에는 아직 누르고 있는 것이다.
+  const onTouchEnd = (event) => {
+    touching = Boolean(event.touches && event.touches.length > 0);
+    if (!touching) armSnap();
+  };
+  // 버튼 위 누름은 스크롤이 아니다. 그 밖(스크롤바 등)은 놓을 때까지 정착하지 않는다.
+  const onPointerDown = (event) => {
+    // 오른쪽·가운데 버튼은 pointerup이 오지 않을 수 있다(컨텍스트 메뉴).
+    if (event.button !== 0) return;
+    if (event.target instanceof Element && event.target.closest("button, a, input, textarea, select, label")) return;
+    dragging = true;
+  };
+  const onPointerUp = () => {
+    if (!dragging) return;
+    dragging = false;
+    armSnap();
+  };
+
+  const onScroll = () => {
+    schedule();
+    const y = window.scrollY;
+    // 넘기기·정착 보간이 만든 스크롤(끝난 직후 늦게 오는 것 포함)은 사용자의 스크롤·멈춤으로 보지 않는다.
+    const own = glide !== null || Math.abs(y - glideEndY) < 1;
+    glideEndY = NaN;
+    if (!own) {
+      if (snapOrigin === null) snapOrigin = snapLastY;
+      if (y !== snapLastY) snapDirection = Math.sign(y - snapLastY);
+      armSnap();
+    }
+    snapLastY = y;
+  };
 
   // 페이드된 Hero로 포커스가 들어오면 텍스트가 보이는 인트로 시작 위치로 되돌린다.
   const onFocusIn = (event) => {
@@ -770,6 +910,13 @@ export const mountScrollRig = ({ track, stage }) => {
 
   window.addEventListener("scroll", onScroll, { passive: true });
   scrollListeners += 1;
+  window.addEventListener("wheel", armSnap, { passive: true });
+  window.addEventListener("touchstart", onTouchStart, { passive: true });
+  window.addEventListener("touchend", onTouchEnd, { passive: true });
+  window.addEventListener("touchcancel", onTouchEnd, { passive: true });
+  window.addEventListener("pointerdown", onPointerDown, { passive: true });
+  window.addEventListener("pointerup", onPointerUp, { passive: true });
+  window.addEventListener("pointercancel", onPointerUp, { passive: true });
   window.addEventListener("resize", requestMeasure);
   reducedQuery.addEventListener("change", requestMeasure);
   wideQuery.addEventListener("change", requestMeasure);
@@ -794,10 +941,19 @@ export const mountScrollRig = ({ track, stage }) => {
 
   const dispose = () => {
     active = false;
+    stopGlide();
     if (frame) window.cancelAnimationFrame(frame);
     frame = 0;
     window.removeEventListener("scroll", onScroll);
     scrollListeners -= 1;
+    window.removeEventListener("wheel", armSnap);
+    window.removeEventListener("touchstart", onTouchStart);
+    window.removeEventListener("touchend", onTouchEnd);
+    window.removeEventListener("touchcancel", onTouchEnd);
+    window.removeEventListener("pointerdown", onPointerDown);
+    window.removeEventListener("pointerup", onPointerUp);
+    window.removeEventListener("pointercancel", onPointerUp);
+    if (snapTimer) window.clearTimeout(snapTimer);
     window.removeEventListener("resize", requestMeasure);
     reducedQuery.removeEventListener("change", requestMeasure);
     wideQuery.removeEventListener("change", requestMeasure);

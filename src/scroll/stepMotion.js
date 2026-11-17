@@ -70,3 +70,56 @@ export const stopAt = (positions, position, tolerance) => {
   });
   return best;
 };
+
+// ---- 멈추면 정착(스냅) ----
+// 항해 구간 안에서 스크롤 입력이 멈추고 idleMs가 지나면 정지점으로 보간해 이동한다.
+// 사용자가 방금 스크롤한 방향이 있으면 그 방향의 다음 정지점으로 간다(조금 내렸는데 되돌아가지 않게).
+// 방향이 없으면(스크롤했다가 제자리로 돌아온 경우) 가장 가까운 정지점으로. 스크롤이 없었으면 정착하지 않는다(snapIntent).
+// 시간은 거리(뷰포트 높이 단위)에 비례(perUnit)하되 min~max초. 출발 속도 비율(start)을 주어 ease-out에 가깝게.
+// max는 챕터 넘기기(STEP_TIMING.chapter)와 같게 두어, 챕터 사이 이동이 방향키로 넘길 때와 같은 빠르기가 되게 한다.
+export const SNAP_ENABLED = true;
+// minMove(px): 이번 스크롤에서 이만큼도 움직이지 않았으면 방향이 없는 것으로 본다.
+export const SNAP_TIMING = { idleMs: 180, min: 0.4, max: 2.4, perUnit: 2, start: 1.5, minMove: 2 };
+
+// 정착 방향 판정. origin은 이번 스크롤이 시작된 위치(스크롤 없이 탭·클릭·빈 휠만 있었으면 null).
+// null: 정착하지 않는다(사용자가 스크롤하지 않았는데 화면을 옮기지 않는다).
+// ±1: 마지막으로 스크롤한 방향의 다음 정지점으로. 0: 제자리로 돌아온 스크롤 → 가장 가까운 정지점으로.
+export const snapIntent = (origin, position, lastDirection) => {
+  if (origin === null || origin === undefined) return null;
+  return Math.abs(position - origin) > SNAP_TIMING.minMove ? Math.sign(lastDirection) : 0;
+};
+
+export const snapDuration = (distance) =>
+  clamp(Math.abs(distance) * SNAP_TIMING.perUnit, SNAP_TIMING.min, SNAP_TIMING.max);
+
+// 정착할 정지점 번호. 움직이지 않을 때는 -1.
+// - 트랙 밖(Hero·Contact)이거나 이미 정지점 근처(tolerance)면 -1.
+// - direction(+1 아래로, -1 위로)이 있으면 그 방향의 다음 정지점. 그 방향에 정지점이 없으면 -1
+//   (첫 정지점 앞에서 위로 = Hero로, 마지막 정지점 뒤에서 아래로 = Contact로 나가는 중).
+// - direction이 0이면 가장 가까운 정지점. 단 트랙 시작·끝이 더 가까우면 -1.
+// positions: 정지점 위치(오름차순), bounds: { start, end } 트랙의 고정 구간
+export const snapTargetIndex = (positions, position, tolerance, bounds, direction = 0) => {
+  if (!positions.length) return -1;
+  if (position < bounds.start || position > bounds.end) return -1;
+  let best = -1;
+  let bestDistance = Infinity;
+  positions.forEach((value, i) => {
+    const distance = Math.abs(value - position);
+    if (distance < bestDistance) {
+      best = i;
+      bestDistance = distance;
+    }
+  });
+  if (bestDistance <= tolerance) return -1;
+  if (direction > 0) return positions.findIndex((value) => value > position);
+  if (direction < 0) {
+    // findLastIndex는 구형 Safari(15.3 이하)에 없어 직접 찾는다.
+    for (let i = positions.length - 1; i >= 0; i -= 1) {
+      if (positions[i] < position) return i;
+    }
+    return -1;
+  }
+  const edge = Math.min(position - bounds.start, bounds.end - position);
+  if (edge < bestDistance) return -1;
+  return best;
+};
