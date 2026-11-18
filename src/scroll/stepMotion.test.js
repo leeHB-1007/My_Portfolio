@@ -158,6 +158,23 @@ describe("정착(스냅)", () => {
     expect(snapTargetIndex(positions, positions[4] + 0.03, tolerance, bounds, 1)).toBe(-1);
   });
 
+  it("이번 스크롤이 정지점을 지나쳤으면 지나친 정지점과 다음 정지점 중 가까운 쪽으로", () => {
+    const gap = positions[5] - positions[4];
+    // 4에서 출발해 5를 조금 지나침 → 5로 돌아온다(6으로 넘어가지 않는다).
+    const overshoot = positions[5] + gap * 0.3;
+    expect(snapTargetIndex(positions, overshoot, tolerance, bounds, 1, { origin: positions[4] })).toBe(5);
+    // 6에 더 가까우면 6으로
+    const almostNext = positions[5] + (positions[6] - positions[5]) * 0.7;
+    expect(snapTargetIndex(positions, almostNext, tolerance, bounds, 1, { origin: positions[4] })).toBe(6);
+    // 위로도 같다.
+    const overshootUp = positions[4] - (positions[4] - positions[3]) * 0.3;
+    expect(snapTargetIndex(positions, overshootUp, tolerance, bounds, -1, { origin: positions[5] })).toBe(4);
+    // 출발점의 정지점은 지나친 것으로 치지 않는다(조금 내렸으면 다음 정지점으로).
+    const justPast = positions[4] + gap * 0.3;
+    expect(snapTargetIndex(positions, justPast, tolerance, bounds, 1, { origin: positions[4] })).toBe(5);
+    expect(snapTargetIndex(positions, justPast, tolerance, bounds, 1, { origin: positions[4] + tolerance })).toBe(5);
+  });
+
   it("방향 쪽에 정지점이 없으면(Hero·Contact로 나가는 중) 정착하지 않는다", () => {
     const last = positions[positions.length - 1];
     expect(snapTargetIndex(positions, positions[0] - 0.3, tolerance, bounds, -1)).toBe(-1);
@@ -193,9 +210,26 @@ describe("정착(스냅)", () => {
     expect(snapTargetIndex(px, second, pxTolerance, pxBounds, snapIntent(first, second, 1))).toBe(5);
   });
 
+  it("고른 정지점이 range보다 멀면 정착하지 않는다", () => {
+    const gap = positions[5] - positions[4];
+    const range = gap / 3;
+    // 4에서 조금 내림: 다음 정지점(5)이 멀어 그대로 둔다.
+    const small = positions[4] + gap * 0.3;
+    expect(snapTargetIndex(positions, small, tolerance, bounds, 1, { origin: positions[4], range })).toBe(-1);
+    // 5 가까이 내림: 5로 맞춘다.
+    const near = positions[4] + gap * 0.8;
+    expect(snapTargetIndex(positions, near, tolerance, bounds, 1, { origin: positions[4], range })).toBe(5);
+    // 5를 조금 지나침: 5로 돌아온다.
+    const over = positions[5] + gap * 0.25;
+    expect(snapTargetIndex(positions, over, tolerance, bounds, 1, { origin: positions[4], range })).toBe(5);
+    // 방향 없음: 가까운 정지점이 range 밖이면 그대로 둔다.
+    const middle = positions[4] + gap * 0.5;
+    expect(snapTargetIndex(positions, middle, tolerance, bounds, 0, { range })).toBe(-1);
+  });
+
   it("정착 시간은 거리에 비례하되 짧으면 최소, 길면 최대", () => {
     expect(snapDuration(0.01)).toBe(SNAP_TIMING.min);
-    expect(snapDuration(0.5)).toBeCloseTo(0.5 * SNAP_TIMING.perUnit, 9);
+    expect(snapDuration(0.2)).toBeCloseTo(0.2 * SNAP_TIMING.perUnit, 9);
     expect(snapDuration(-5)).toBe(SNAP_TIMING.max);
   });
 });
