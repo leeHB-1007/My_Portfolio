@@ -20,6 +20,7 @@ import {
   snapIntent,
   snapTargetIndex,
   stepDuration,
+  inAutoScrollZone,
   stopAt,
   wheelGestureStep,
 } from "./stepMotion";
@@ -925,7 +926,8 @@ export const mountScrollRig = ({ track, stage }) => {
   };
 
   // ---- 휠 넘기기 ----
-  // 항해 구간 안에서는 휠·트랙패드 한 번(한 제스처)이 정지점 한 칸 자동 넘기기다. 손으로 스크롤하면
+  // Hero 인트로~항해~Contact 위 끝에서는 휠·트랙패드 한 번(한 제스처)이 정지점 한 칸 자동 넘기기다
+  // (Hero 맨 위 ↔ 첫 행성 도착, 위성·행성 사이, 마지막 위성 ↔ Contact). 손으로 스크롤하면
   // 위성·행성 사이에서 중간에 끊기므로, 스크롤 대신 넘기기 보간으로 한 번에 옮긴다.
   // 넘기는 동안의 입력은 막고, 넘긴 뒤에도 같은 제스처(트랙패드 관성 포함)는 다음 칸으로 넘기지 않는다
   // (wheelGestureStep). 트랙 밖·가로 스크롤·핀치 줌은 그대로 둔다.
@@ -951,9 +953,12 @@ export const mountScrollRig = ({ track, stage }) => {
     const dir = Math.sign(event.deltaY);
     if (!dir) return;
     const y = window.scrollY;
-    // 트랙 안에서 움직일 때만. 트랙 끝에서 Hero·Contact 쪽으로 나가는 스크롤은 네이티브로 둔다.
-    const inside = dir > 0 ? y >= journey.start && y < journey.end : y > journey.start && y <= journey.end;
-    if (!inside) {
+    // Hero 인트로부터 Contact 위 끝까지는 휠을 자동 넘기기로 바꾼다. 인트로(은하 접근)·마지막 장면 전환도
+    // 손 스크롤에 묶이면 한 번에 세게 굴릴 때 순식간에 지나가기 때문이다.
+    // Hero 맨 위에서 위로, Contact부터 아래로는 네이티브 스크롤이다.
+    const { positions } = stopPositions(journey);
+    const zoneEnd = stopTarget(positions, positions.length);
+    if (!inAutoScrollZone(y, dir, rig.heroStart, zoneEnd)) {
       gesture.dir = 0;
       return;
     }
