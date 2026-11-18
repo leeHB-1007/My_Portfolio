@@ -235,6 +235,26 @@ VITE_APP_EMAILJS_PUBLIC_KEY=your_public_key
 
 EmailJS 설정이 없거나 전송이 실패해도, UI에는 Email / GitHub / Velog / LinkedIn 직접 링크가 함께 노출됩니다.
 
+사용 분석(PostHog)은 아래 값이 있을 때만 프로덕션 빌드에서 켜집니다. 전체 목록은 `.env.example`에 있습니다.
+
+```env
+VITE_POSTHOG_PROJECT_TOKEN=phc_your_project_token
+VITE_POSTHOG_HOST=https://us.i.posthog.com
+```
+
+## 모니터링과 사용 분석
+
+- **Vercel Web Analytics·Speed Insights**: 방문·유입 경로와 실제 사용자 성능(LCP·INP·CLS)을 Vercel 프로젝트 대시보드의 Analytics·Speed Insights 탭에서 봅니다. 대시보드에서 각각 Enable해야 수집됩니다(`src/App.jsx`).
+- **PostHog**: 이벤트·퍼널·세션 리플레이와 feature flag·실험(A/B)에 씁니다. `posthog-js`는 첫 화면을 그린 뒤 브라우저가 한가할 때 별도 청크로 불러오고, 브라우저의 Do Not Track 설정을 따릅니다(`src/analytics/index.js`).
+- 수집하는 이벤트:
+
+| 이벤트 | 속성 | 시점 |
+| --- | --- | --- |
+| `journey_chapter_reached` | `chapter`(1~), `id` | 항해에서 챕터에 처음 도착 |
+| `journey_completed` | - | 항해 트랙 끝을 지남 |
+| `contact_form_submitted` | `result`(`success`·`error`) | 연락 폼 전송 결과 |
+| `contact_link_clicked` | `channel`, `location`(`hero`·`contact`) | 직접 연락 링크 클릭 |
+
 ## 배포
 
 ### Vercel
@@ -245,6 +265,7 @@ EmailJS 설정이 없거나 전송이 실패해도, UI에는 Email / GitHub / Ve
 - Framework preset: Vite
 - Build command: `npm run build`
 - Output directory: `dist`
+- Environment Variables: EmailJS·PostHog 값(`.env.example` 참고)
 
 ### Docker
 

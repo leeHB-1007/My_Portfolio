@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 
 import { styles } from "../styles";
+import { track } from "../analytics";
 import { profile, profileLinks } from "../constants";
 import { rig } from "../scroll/scrollRig";
 import useScrollRig from "../scroll/useScrollRig";
@@ -95,6 +96,9 @@ const Hero = () => {
                       link.href.startsWith("mailto:")
                         ? undefined
                         : "noopener noreferrer"
+                    }
+                    onClick={() =>
+                      track("contact_link_clicked", { channel: link.label, location: "hero" })
                     }
                     className={`rounded-full px-5 py-3 text-sm font-semibold transition ${
                       index === 0
