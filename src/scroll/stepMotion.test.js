@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 import { STOP_TOLERANCE, createJourneyLayout, journeyStops } from "./journeyPose";
 import {
   SNAP_TIMING,
+  FOCUS_TIME,
   STEP_TIMING,
-  snapDuration,
   snapIntent,
   snapTargetIndex,
   createGlide,
@@ -12,6 +12,8 @@ import {
   glideVelocity,
   stepDuration,
   stopAt,
+  WHEEL_GESTURE,
+  wheelGestureStep,
 } from "./stepMotion";
 
 const COUNTS = [5, 4, 9, 6, 6];
@@ -21,6 +23,41 @@ const layout = createJourneyLayout(
 const stops = journeyStops(layout);
 
 describe("glide", () => {
+  it("집중 구간: 화면이 바뀌는 구간에 시간 대부분을 쓰고, 끝·연속·단조를 지킨다", () => {
+    const glide = createGlide({ from: 0, to: 1000, duration: 1, focus: { start: 0.4, end: 0.7 } });
+    expect(glideAt(glide, 0)).toBe(0);
+    expect(glideAt(glide, 1)).toBe(1000);
+    expect(glideVelocity(glide, 0)).toBeCloseTo(0, 9);
+    expect(Math.abs(glideVelocity(glide, 0.99999))).toBeLessThan(5);
+    let previous = -Infinity;
+    let inFocus = 0;
+    const dt = 0.001;
+    for (let t = 0; t <= 1; t += dt) {
+      const value = glideAt(glide, t);
+      expect(value).toBeGreaterThanOrEqual(previous - 1e-9);
+      if (value >= 400 && value <= 700) inFocus += dt;
+      previous = value;
+    }
+    expect(inFocus).toBeCloseTo(1 - 2 * FOCUS_TIME.lead, 2);
+    // 구간 경계에서 속도가 이어진다.
+    const edge = FOCUS_TIME.lead;
+    const jump = (at) => Math.abs(glideVelocity(glide, at - 1e-6) - glideVelocity(glide, at + 1e-6));
+    expect(jump(edge)).toBeLessThan(1);
+    expect(jump(1 - edge)).toBeLessThan(1);
+    // 위쪽(거리 음수)도 같다.
+    const up = createGlide({ from: 1000, to: 0, duration: 1, focus: { start: 0.3, end: 0.6 } });
+    expect(glideAt(up, 0.5)).toBeLessThan(1000 - 300);
+    expect(glideAt(up, 0.5)).toBeGreaterThan(1000 - 600);
+  });
+
+  it("집중 구간이 끝에 붙어 있거나 비어 있으면 그에 맞게 처리한다", () => {
+    const flat = createGlide({ from: 0, to: 100, duration: 1, focus: { start: 0.5, end: 0.5 } });
+    expect(flat.focus).toBeNull();
+    const edge = createGlide({ from: 0, to: 100, duration: 1, focus: { start: 0, end: 0.5 } });
+    expect(glideAt(edge, 1)).toBe(100);
+    expect(glideAt(edge, 0.5)).toBeGreaterThan(0);
+  });
+
   it("시작·끝 위치, 끝 이후 고정, 단조 증가(ease-in-out)", () => {
     const glide = createGlide({ from: 100, to: 900, duration: 2 });
     expect(glideAt(glide, 0)).toBe(100);
@@ -158,6 +195,23 @@ describe("정착(스냅)", () => {
     expect(snapTargetIndex(positions, positions[4] + 0.03, tolerance, bounds, 1)).toBe(-1);
   });
 
+  it("이번 스크롤이 정지점을 지나쳤으면 지나친 정지점과 다음 정지점 중 가까운 쪽으로", () => {
+    const gap = positions[5] - positions[4];
+    // 4에서 출발해 5를 조금 지나침 → 5로 돌아온다(6으로 넘어가지 않는다).
+    const overshoot = positions[5] + gap * 0.3;
+    expect(snapTargetIndex(positions, overshoot, tolerance, bounds, 1, positions[4])).toBe(5);
+    // 6에 더 가까우면 6으로
+    const almostNext = positions[5] + (positions[6] - positions[5]) * 0.7;
+    expect(snapTargetIndex(positions, almostNext, tolerance, bounds, 1, positions[4])).toBe(6);
+    // 위로도 같다.
+    const overshootUp = positions[4] - (positions[4] - positions[3]) * 0.3;
+    expect(snapTargetIndex(positions, overshootUp, tolerance, bounds, -1, positions[5])).toBe(4);
+    // 출발점의 정지점은 지나친 것으로 치지 않는다(조금 내렸으면 다음 정지점으로).
+    const justPast = positions[4] + gap * 0.3;
+    expect(snapTargetIndex(positions, justPast, tolerance, bounds, 1, positions[4])).toBe(5);
+    expect(snapTargetIndex(positions, justPast, tolerance, bounds, 1, positions[4] + tolerance)).toBe(5);
+  });
+
   it("방향 쪽에 정지점이 없으면(Hero·Contact로 나가는 중) 정착하지 않는다", () => {
     const last = positions[positions.length - 1];
     expect(snapTargetIndex(positions, positions[0] - 0.3, tolerance, bounds, -1)).toBe(-1);
@@ -192,10 +246,27 @@ describe("정착(스냅)", () => {
     expect(snapTargetIndex(px, first, pxTolerance, pxBounds, snapIntent(px[4], first, 1))).toBe(-1);
     expect(snapTargetIndex(px, second, pxTolerance, pxBounds, snapIntent(first, second, 1))).toBe(5);
   });
+});
 
-  it("정착 시간은 거리에 비례하되 짧으면 최소, 길면 최대", () => {
-    expect(snapDuration(0.01)).toBe(SNAP_TIMING.min);
-    expect(snapDuration(0.5)).toBeCloseTo(0.5 * SNAP_TIMING.perUnit, 9);
-    expect(snapDuration(-5)).toBe(SNAP_TIMING.max);
+
+describe("휠 제스처 넘기기", () => {
+  const { gapMs } = WHEEL_GESTURE;
+
+  it("새 제스처는 넘기고, 같은 방향으로 촘촘히 이어지며 줄어드는 입력(관성)은 무시한다", () => {
+    expect(wheelGestureStep({ dir: 0, delta: 0 }, 1, 30, 10)).toBe(1);
+    expect(wheelGestureStep({ dir: 1, delta: 30 }, 1, 25, 16)).toBe(0);
+    expect(wheelGestureStep({ dir: 1, delta: 100 }, 1, 100, 60)).toBe(0);
+  });
+
+  it("잠깐 쉬었다 굴리거나, 관성 중에 다시 세게 밀면 넘긴다", () => {
+    expect(wheelGestureStep({ dir: 1, delta: 30 }, 1, 30, gapMs)).toBe(1);
+    expect(wheelGestureStep({ dir: 1, delta: 5 }, 1, 20, 16)).toBe(1);
+    // 아주 작은 입력의 흔들림은 새로 민 것으로 보지 않는다.
+    expect(wheelGestureStep({ dir: 1, delta: 1 }, 1, 2, 16)).toBe(0);
+  });
+
+  it("방향을 바꾸면 바로 넘긴다", () => {
+    expect(wheelGestureStep({ dir: 1, delta: 30 }, -1, 30, 16)).toBe(-1);
+    expect(wheelGestureStep({ dir: -1, delta: 30 }, 1, 30, 16)).toBe(1);
   });
 });

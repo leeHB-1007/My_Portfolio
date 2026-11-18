@@ -1,6 +1,7 @@
 import { POSE_KEYS, samplePose } from "./galaxyPose";
 import {
   ITEM_TARGET_U,
+  ROTATE_END,
   STOP_TOLERANCE,
   findStop,
   itemOffset,
@@ -16,13 +17,13 @@ import {
   createGlide,
   glideAt,
   glideVelocity,
-  snapDuration,
   snapIntent,
   snapTargetIndex,
   stepDuration,
   stopAt,
+  wheelGestureStep,
 } from "./stepMotion";
-import { SMOOTH_SCROLL, decayLag, followScroll, shouldJumpScroll } from "./smoothScroll";
+import { SMOOTH_SCROLL, followScroll, restScroll, shouldJumpScroll } from "./smoothScroll";
 
 const EPSILON = 1e-3;
 const CSS_STEP = 0.001;
@@ -342,8 +343,9 @@ export const setJourneyHover = (itemId) => {
 };
 
 // ---- 넘기기 스크롤 보간 ----
-// 버튼·방향키·라벨·목차로 넘길 때는 rig가 rAF로 직접 스크롤한다(stepMotion의 시간·곡선).
-// 사용자가 직접 스크롤(휠·터치·스크롤바·스크롤 키)하면 즉시 멈춘다.
+// 버튼·방향키·라벨·목차로 넘기거나 멈춘 뒤 정착할 때는 rig가 rAF로 직접 스크롤한다(stepMotion의 시간·곡선).
+// 보간 중 휠·터치 스크롤은 막는다(mountScrollRig의 onWheel·onTouchMove). 보간과 사용자 스크롤이 서로
+// 끊고 이어 가며 어색하게 움직이지 않게 한다. 스크롤바 드래그·링크 클릭·스크롤 키는 즉시 멈춘다.
 let glide = null;
 // 마지막 보간이 마지막으로 쓴 스크롤 위치. 보간이 끝난 뒤 늦게 오는 그 위치의 scroll 이벤트를 가려내는 데 쓴다.
 let glideEndY = NaN;
@@ -363,8 +365,6 @@ const CANCEL_KEYS = new Set([
 const stopGlide = () => {
   if (!glide) return;
   window.cancelAnimationFrame(glide.frame);
-  window.removeEventListener("wheel", stopGlide);
-  window.removeEventListener("touchstart", stopGlide);
   window.removeEventListener("pointerdown", onGlidePointer);
   window.removeEventListener("keydown", onGlideKey);
   glideEndY = glide.lastY === null ? NaN : glide.lastY;
@@ -373,7 +373,9 @@ const stopGlide = () => {
 
 // 버튼(이전/다음·라벨·목차) 위의 누름은 넘기기를 이어 가는 입력이라 멈추지 않는다.
 // 링크(Navbar 앵커 등)·스크롤바 드래그·그 밖의 누름은 사용자가 직접 움직이는 것으로 보고 멈춘다.
+// 터치는 스크롤 시도이므로 멈추지 않는다(onTouchMove가 막는다).
 function onGlidePointer(event) {
+  if (event.pointerType === "touch") return;
   if (event.target instanceof Element && event.target.closest("button")) return;
   stopGlide();
 }
@@ -401,18 +403,21 @@ const glideFrame = () => {
   glide.frame = window.requestAnimationFrame(glideFrame);
 };
 
-// target(px)까지 duration(초) 동안 보간한다. 같은 방향으로 가던 중이면 그 속도를 이어받는다.
-const glideTo = (target, duration, { direction, index, kind = "step", startSpeed = 0 }) => {
+// target(px)까지 duration(초) 동안 보간한다. startVelocity(px/s)로 출발하고,
+// 같은 방향으로 가던 보간이 있으면 그 속도를 이어받는다.
+const glideTo = (
+  target,
+  duration,
+  { direction, index, kind = "step", startVelocity = 0, focus = null }
+) => {
   const now = performance.now();
   const from = window.scrollY;
-  let velocity = duration > 0 ? (startSpeed * (target - from)) / duration : 0;
+  let velocity = startVelocity;
   if (glide && glide.direction === direction) {
     velocity = glideVelocity(glide.curve, (now - glide.start) / 1000);
   }
-  const curve = createGlide({ from, to: target, duration, velocity });
+  const curve = createGlide({ from, to: target, duration, velocity, focus });
   if (!glide) {
-    window.addEventListener("wheel", stopGlide, { passive: true });
-    window.addEventListener("touchstart", stopGlide, { passive: true });
     window.addEventListener("pointerdown", onGlidePointer, { passive: true });
     window.addEventListener("keydown", onGlideKey);
   } else {
@@ -471,6 +476,21 @@ export const scrollToJourneyItem = (index) => {
   glideTo(target, duration, { direction: Math.sign(target - window.scrollY), index: stopIndex });
 };
 
+// 같은 챕터 안 한 칸 넘기기에서 화면이 실제로 바뀌는 경로 구간(createGlide의 focus, 경로 비율).
+// 들어가거나 떠나는 위성(두 정지점 중 뒤쪽 위성)의 u 0 ~ ROTATE_END에서 고리가 돌고 본문이 교차 페이드한다.
+// 챕터를 넘거나 여러 칸을 건너뛰면 null(카메라가 경로 내내 움직이므로 보통 곡선을 쓴다).
+const itemFocus = (journey, stops, fromIndex, toIndex, fromY, target, unit) => {
+  if (fromIndex === null || Math.abs(toIndex - fromIndex) !== 1) return null;
+  const a = stops[fromIndex];
+  const b = stops[toIndex];
+  if (!a || !b || a.chapter !== b.chapter || target === fromY) return null;
+  const segment = journey.layout.segments[a.chapter];
+  const item = Math.max(a.item, b.item);
+  const ratio = (u) => (journey.start + itemOffset(segment, item, u) * unit - fromY) / (target - fromY);
+  const ends = [ratio(0), ratio(ROTATE_END)].map((value) => Math.min(Math.max(value, 0), 1));
+  return { start: Math.min(...ends), end: Math.max(...ends) };
+};
+
 // 이전(-1)/다음(+1) 정지점으로 보간해 이동한다.
 // 첫 정지점에서 이전 → Hero 맨 위, 마지막 정지점에서 다음 → Contact. 반환: 이동했는지
 export const stepJourney = (direction) => {
@@ -506,7 +526,8 @@ export const stepJourney = (direction) => {
   });
   // 이어 갈 때는 남은 시간의 절반을 더해 처음부터 다시 가속하지 않고 자연스럽게 이어지게 한다.
   const duration = continuing ? base + remainingOf(glide) * 0.5 : base;
-  glideTo(target, duration, { direction: dir, index });
+  const focus = continuing ? null : itemFocus(journey, stops, from, index, scrollY, target, unit);
+  glideTo(target, duration, { direction: dir, index, focus });
   return true;
 };
 
@@ -768,8 +789,10 @@ export const mountScrollRig = ({ track, stage }) => {
     }
   };
 
-  // 실제 scrollY를 smoothY로 지연 보간해 장면 값을 계산한다. 수렴할 때까지만 rAF를 이어 간다.
-  let smoothY = null;
+  // 실제 scrollY를 smoothY로 지연 보간(임계 감쇠 스프링)해 장면 값을 계산한다. 수렴할 때까지만 rAF를 이어 간다.
+  // 넘기기·정착 보간 중에도 같은 스프링으로 따라간다. 보간이 시작·취소되는 순간 실제 위치의 속도가
+  // 바뀌어도 장면 속도는 이어지게 하기 위해서다.
+  let smooth = null;
   let lastRaw = null;
   let lastRunAt = 0;
   const run = () => {
@@ -782,25 +805,19 @@ export const mountScrollRig = ({ track, stage }) => {
     // 측정이 바뀌면 px로 정해 둔 보간 목표가 낡으므로 멈춘다.
     if (measuredChanged) stopGlide();
     const jump = shouldJumpScroll({
-      first: smoothY === null,
+      first: smooth === null,
       remeasured: measuredChanged,
       previousRaw: lastRaw,
       raw,
       vh: rig.vh,
     });
-    if (jump) {
-      smoothY = raw;
-    } else if (glide) {
-      // 보간은 그대로 따라가고, 보간이 시작될 때 남아 있던 지연만 줄여 간다.
-      smoothY = raw + decayLag(smoothY - lastRaw, dt);
-    } else {
-      smoothY = followScroll(smoothY, raw, dt);
-    }
+    smooth = jump ? restScroll(raw) : followScroll(smooth, raw, dt);
+    const smoothY = smooth.position;
     lastRaw = raw;
     rig.rawY = raw;
     rig.smoothY = smoothY;
     update(measuredChanged, smoothY);
-    if (smoothY !== raw) {
+    if (smoothY !== raw || smooth.velocity !== 0) {
       lastRunAt = now;
       schedule();
     } else {
@@ -836,7 +853,7 @@ export const mountScrollRig = ({ track, stage }) => {
     if (glide) return;
     const journey = rig.journey;
     if (!journey || !journey.measured || rig.mode !== "pinned") return;
-    const { unit, positions, tolerance } = stopPositions(journey);
+    const { unit, stops, positions, tolerance } = stopPositions(journey);
     const raw = window.scrollY;
     // 스크롤 없이 탭·클릭·빈 휠만 있었으면 화면을 옮기지 않는다.
     const intent = snapIntent(origin, raw, snapDirection);
@@ -846,16 +863,25 @@ export const mountScrollRig = ({ track, stage }) => {
       raw,
       tolerance,
       { start: journey.start, end: journey.end },
-      intent
+      intent,
+      origin
     );
     if (index < 0) return;
     const target = clampScroll(positions[index]);
-    const duration = snapDuration(unit > 0 ? (target - raw) / unit : 0);
+    // 넘기기와 같은 시간 규칙(정지점 사이에서 출발하므로 거리에 비례)
+    const duration = stepDuration({
+      from: null,
+      to: index,
+      stops,
+      distance: unit > 0 ? (target - raw) / unit : 0,
+    });
+    // 장면이 아직 감속 중이면 그 속도로 출발해 멈칫했다가 다시 가속하지 않게 한다
+    // (반대 방향이면 createGlide가 0으로 둔다).
     glideTo(target, duration, {
       direction: Math.sign(target - raw),
       index,
       kind: "snap",
-      startSpeed: SNAP_TIMING.start,
+      startVelocity: smooth ? smooth.velocity : 0,
     });
   };
   const armSnap = () => {
@@ -898,6 +924,49 @@ export const mountScrollRig = ({ track, stage }) => {
     snapLastY = y;
   };
 
+  // ---- 휠 넘기기 ----
+  // 항해 구간 안에서는 휠·트랙패드 한 번(한 제스처)이 정지점 한 칸 자동 넘기기다. 손으로 스크롤하면
+  // 위성·행성 사이에서 중간에 끊기므로, 스크롤 대신 넘기기 보간으로 한 번에 옮긴다.
+  // 넘기는 동안의 입력은 막고, 넘긴 뒤에도 같은 제스처(트랙패드 관성 포함)는 다음 칸으로 넘기지 않는다
+  // (wheelGestureStep). 트랙 밖·가로 스크롤·핀치 줌은 그대로 둔다.
+  let gestureAt = 0;
+  // dir: 이번 제스처로 넘긴 방향(0: 새 제스처를 기다리는 중), delta: 직전 입력의 |deltaY|
+  const gesture = { dir: 0, delta: 0 };
+  const onWheel = (event) => {
+    if (event.defaultPrevented || event.ctrlKey) return;
+    const now = performance.now();
+    const quiet = now - gestureAt;
+    gestureAt = now;
+    const previousDelta = gesture.delta;
+    const delta = Math.abs(event.deltaY);
+    gesture.delta = delta;
+    // 넘기기·정착 보간 중에는 휠 스크롤을 막는다.
+    if (glide) {
+      event.preventDefault();
+      return;
+    }
+    if (Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
+    const journey = rig.journey;
+    if (!journey || !journey.measured || rig.mode !== "pinned") return;
+    const dir = Math.sign(event.deltaY);
+    if (!dir) return;
+    const y = window.scrollY;
+    // 트랙 안에서 움직일 때만. 트랙 끝에서 Hero·Contact 쪽으로 나가는 스크롤은 네이티브로 둔다.
+    const inside = dir > 0 ? y >= journey.start && y < journey.end : y > journey.start && y <= journey.end;
+    if (!inside) {
+      gesture.dir = 0;
+      return;
+    }
+    event.preventDefault();
+    if (!wheelGestureStep({ dir: gesture.dir, delta: previousDelta }, dir, delta, quiet)) return;
+    gesture.dir = stepJourney(dir) ? dir : 0;
+  };
+
+  // 넘기기·정착 보간 중에는 터치 스크롤을 막는다.
+  const onTouchMove = (event) => {
+    if (glide && event.cancelable) event.preventDefault();
+  };
+
   // 페이드된 Hero로 포커스가 들어오면 텍스트가 보이는 인트로 시작 위치로 되돌린다.
   const onFocusIn = (event) => {
     if (rig.mode !== "pinned" || rig.heroP <= REFOCUS_AFTER) return;
@@ -910,8 +979,10 @@ export const mountScrollRig = ({ track, stage }) => {
 
   window.addEventListener("scroll", onScroll, { passive: true });
   scrollListeners += 1;
+  window.addEventListener("wheel", onWheel, { passive: false });
   window.addEventListener("wheel", armSnap, { passive: true });
   window.addEventListener("touchstart", onTouchStart, { passive: true });
+  window.addEventListener("touchmove", onTouchMove, { passive: false });
   window.addEventListener("touchend", onTouchEnd, { passive: true });
   window.addEventListener("touchcancel", onTouchEnd, { passive: true });
   window.addEventListener("pointerdown", onPointerDown, { passive: true });
@@ -946,8 +1017,10 @@ export const mountScrollRig = ({ track, stage }) => {
     frame = 0;
     window.removeEventListener("scroll", onScroll);
     scrollListeners -= 1;
+    window.removeEventListener("wheel", onWheel);
     window.removeEventListener("wheel", armSnap);
     window.removeEventListener("touchstart", onTouchStart);
+    window.removeEventListener("touchmove", onTouchMove);
     window.removeEventListener("touchend", onTouchEnd);
     window.removeEventListener("touchcancel", onTouchEnd);
     window.removeEventListener("pointerdown", onPointerDown);
