@@ -8,7 +8,9 @@
   margin: 0;
   padding: 0;
   box-sizing: border-box;
-  font-family: "Poppins", sans-serif;
+  /* 라틴은 Poppins, 한글은 Pretendard(index.html의 CDN 스타일시트). tailwind.config.cjs의 sans와 같다. */
+  font-family: "Poppins", "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
+    system-ui, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
   scroll-behavior: smooth;
   color-scheme: dark;
 }
@@ -44,6 +46,158 @@ textarea {
 ::selection {
   background: rgba(145, 94, 255, 0.35);
   color: #ffffff;
+}
+
+/* 100lvh: iOS 주소창이 변해도 높이가 고정되어 canvas 버퍼를 다시 만들지 않는다. */
+.galaxy-layer {
+  height: 100vh;
+  height: 100lvh;
+}
+
+.galaxy-veil {
+  position: absolute;
+  inset: 0;
+  background: #050816;
+  opacity: var(--veil, 0);
+}
+
+/*
+ * Hero 인트로. 레이아웃 모드(pinned/flow/reduced)는 아래 미디어쿼리만으로 정한다.
+ * scrollRig는 stage의 position을 읽기만 한다. 임계값(860/700/559)은 이 파일에만 둔다.
+ */
+.hero-track {
+  position: relative;
+  height: 220vh;
+}
+
+@media (max-width: 640px) {
+  .hero-track {
+    height: 160vh;
+  }
+}
+
+.hero-stage {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  height: 100svh;
+  overflow: hidden;
+  overflow: clip;
+  display: flex;
+  flex-direction: column;
+  /* 세로 가운데 정렬은 웹폰트 로드 때 텍스트 열 전체가 밀려 CLS가 커진다(실측 0.18). 위에서부터 배치한다. */
+  justify-content: flex-start;
+  padding-top: clamp(104px, 18vh, 200px);
+  padding-bottom: 120px;
+}
+
+/* 좁은 화면: 텍스트 열을 덮는 상→하 스크림(은하가 내려가 있는 하단은 투명). */
+.hero-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 15;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.85) 0%,
+    rgba(0, 0, 0, 0.6) 55%,
+    rgba(0, 0, 0, 0) 85%
+  );
+}
+
+@media (min-width: 1024px) {
+  .hero-scrim {
+    background: linear-gradient(
+      to right,
+      rgba(0, 0, 0, 0.85) 0%,
+      rgba(0, 0, 0, 0.45) 50%,
+      rgba(0, 0, 0, 0) 100%
+    );
+  }
+}
+
+.hero-indicator-dot {
+  animation: hero-indicator-bounce 1.5s ease-in-out infinite;
+}
+
+@keyframes hero-indicator-bounce {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(24px);
+  }
+}
+
+/* pinned 전용: 페이드와 압축 규칙 */
+@media (min-height: 560px) and (prefers-reduced-motion: no-preference) {
+  .hero-fade {
+    opacity: clamp(0, calc(1 - (var(--hero-p, 0) - 0.1) / 0.3), 1);
+    transform: translateY(calc(var(--hero-p, 0) * -80px));
+  }
+
+  /* 스크림은 위치가 바뀌면 하단에 틈이 생기므로 투명도만 따라간다. */
+  .hero-scrim {
+    opacity: clamp(0, calc(1 - (var(--hero-p, 0) - 0.1) / 0.3), 1);
+  }
+
+  /* 투명해진 링크가 클릭을 가로채지 않게 한다. */
+  .hero-stage[data-hero-faded] .hero-fade {
+    pointer-events: none;
+  }
+}
+
+@media (min-height: 560px) and (max-width: 640px) and (prefers-reduced-motion: no-preference),
+  (min-height: 560px) and (max-height: 860px) and (prefers-reduced-motion: no-preference) {
+  .hero-summary {
+    display: none;
+  }
+}
+
+@media (min-height: 560px) and (max-height: 700px) and (prefers-reduced-motion: no-preference) {
+  .hero-chips,
+  .hero-indicator {
+    display: none;
+  }
+
+  .hero-stage {
+    padding-bottom: 32px;
+  }
+}
+
+/* flow: 화면이 낮아 고정하면 내용이 잘리는 경우 */
+@media (max-height: 559px) {
+  .hero-track {
+    height: auto;
+  }
+
+  .hero-stage {
+    position: relative;
+    height: auto;
+    min-height: 100vh;
+    min-height: 100svh;
+    overflow: visible;
+  }
+}
+
+/* reduced: flow와 같은 배치, 페이드 없음(flow보다 뒤에 선언) */
+@media (prefers-reduced-motion: reduce) {
+  .hero-track {
+    height: auto;
+  }
+
+  .hero-stage {
+    position: relative;
+    height: auto;
+    min-height: 100vh;
+    min-height: 100svh;
+    overflow: visible;
+  }
+
+  .motion-toggle {
+    display: none;
+  }
 }
 
 .hash-span {
@@ -215,4 +369,2514 @@ textarea {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+
+/*
+ * 은하 항해. App이 JOURNEY_QUERY(min-height 600px, 모션 허용)와 3D 사용 가능 여부로 이 트리를 고른다.
+ * 트랙은 Hero 트랙의 마지막 한 화면과 겹쳐, 인트로가 끝나는 순간 스테이지가 고정된다.
+ * 스테이지는 그 전부터 Hero 위로 올라오므로 투명하고 포인터를 받지 않는다.
+ *
+ * 항해 UI 토큰: 글자 #f4f2fb / 보조 #bdb8d8 / 흐린 #8e89ad, 강조 #915eff(보라)·#c9b8ff(라벤더)·#f272c8(분홍).
+ * 스크롤 값은 rig가 쓴다: 패널·본문·stack의 --k, 스테이지의 --ck(연결선)·--lk(라벨)·--hud(챕터 내비게이션).
+ */
+.journey-track {
+  position: relative;
+  margin-top: -100vh;
+  margin-top: -100svh;
+  height: calc((var(--journey-units) + 1) * 100vh);
+  height: calc((var(--journey-units) + 1) * 100svh);
+}
+
+.journey-anchor {
+  position: absolute;
+  left: 0;
+  width: 1px;
+  height: 0;
+  top: calc(var(--at) * 100vh);
+  top: calc(var(--at) * 100svh);
+}
+
+.journey-stage {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  height: 100svh;
+  overflow: hidden;
+  overflow: clip;
+  pointer-events: none;
+}
+
+.journey-stage:not([data-journey-on]) .journey-dots,
+.journey-stage:not([data-journey-on]) .journey-labels,
+.journey-stage:not([data-journey-on]) .journey-planet-tag {
+  visibility: hidden;
+}
+
+/*
+ * 챕터 내비게이션: 번호 + 눈금. 현재 챕터는 눈금이 길어지고 이름이 세로로 붙는다.
+ * 좁은 화면은 가로 한 줄(이름 없음), 768px 이상은 오른쪽 세로 가운데.
+ */
+.journey-dots {
+  position: absolute;
+  z-index: 5;
+  top: 104px;
+  right: 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  pointer-events: auto;
+  opacity: var(--hud, 0);
+}
+
+.journey-dots ol {
+  display: flex;
+  gap: 4px;
+  list-style: none;
+}
+
+.journey-dot {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 4px;
+  color: #8e89ad;
+}
+
+.journey-dot-number {
+  display: none;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  font-variant-numeric: tabular-nums;
+}
+
+.journey-dot-tick {
+  display: block;
+  width: 10px;
+  height: 2px;
+  border-radius: 2px;
+  background: rgba(189, 184, 216, 0.45);
+  transition:
+    width 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 0.35s ease,
+    box-shadow 0.35s ease;
+}
+
+.journey-dot:hover {
+  color: #f4f2fb;
+}
+
+.journey-dot:hover .journey-dot-tick {
+  background: #f4f2fb;
+}
+
+.journey-dot[aria-current] {
+  color: #f4f2fb;
+}
+
+.journey-dot[aria-current] .journey-dot-tick {
+  width: 22px;
+  background: linear-gradient(90deg, #915eff, #f272c8);
+  box-shadow: 0 0 10px rgba(145, 94, 255, 0.7);
+}
+
+.journey-dots-caption {
+  display: none;
+}
+
+/*
+ * 이전/다음 버튼: 좁은 화면은 왼쪽 아래(패널 영역 아래 64px 띠 안, MotionToggle 왼쪽),
+ * 768px 이상은 체류 중 행성의 가로 위치 아래 가운데. 위치·크기는 JOURNEY_STEPPER와 같다.
+ */
+.journey-stepper {
+  position: absolute;
+  z-index: 6;
+  left: 16px;
+  bottom: var(--stepper-bottom-narrow, 16px);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: var(--stepper-height, 44px);
+  pointer-events: auto;
+  opacity: var(--hud, 0);
+}
+
+.journey-stage:not([data-journey-on]) .journey-stepper {
+  visibility: hidden;
+}
+
+.journey-step {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: var(--stepper-height, 44px);
+  height: var(--stepper-height, 44px);
+  border: 1px solid rgba(244, 242, 251, 0.18);
+  border-radius: 9999px;
+  background: rgba(5, 8, 22, 0.55);
+  color: #f4f2fb;
+}
+
+.journey-step:hover {
+  border-color: rgba(145, 94, 255, 0.8);
+  background: rgba(21, 16, 48, 0.75);
+}
+
+.journey-step-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.journey-step-count {
+  min-width: 56px;
+  color: #8e89ad;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.2em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.journey-step-current {
+  color: #f4f2fb;
+}
+
+.journey-step-hint {
+  display: flex;
+  gap: 4px;
+}
+
+.journey-step-hint kbd {
+  min-width: 20px;
+  padding: 2px 5px;
+  border: 1px solid rgba(244, 242, 251, 0.16);
+  border-radius: 5px;
+  color: #8e89ad;
+  font-family: inherit;
+  font-size: 10px;
+  line-height: 14px;
+  text-align: center;
+}
+
+/* 터치 기기에는 방향키 힌트를 보이지 않는다. */
+@media (hover: none) {
+  .journey-step-hint {
+    display: none;
+  }
+}
+
+/*
+ * 위성 라벨: li의 transform(위성의 화면 좌표)과 --a(행성 앞 1, 뒤 0.35)는 PlanetSystem이 쓴다.
+ * 상자 대신 위성에서 내려오는 가는 선 + 자간 넓은 글자. 앞 자리(현재) 위성만 테두리와 점으로 분명하게.
+ * 크기 상한(위성 아래 10px에서 시작, 최대 폭 160/140px, 좁은 화면 높이 38px 이하)은 projection.test.js와 맞춘다.
+ */
+.journey-labels {
+  position: absolute;
+  inset: 0;
+  opacity: var(--lk, 0);
+}
+
+.journey-label-list {
+  list-style: none;
+}
+
+.journey-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  opacity: var(--a, 0);
+}
+
+.journey-label-button {
+  position: absolute;
+  left: 0;
+  top: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: max-content;
+  max-width: 200px;
+  padding: 3px 8px 4px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: rgba(6, 6, 20, 0.5);
+  color: #e4e0f4;
+  text-align: center;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.9);
+  opacity: 0.72;
+  transform: translateX(calc(-50% + var(--dx, 0px)));
+  pointer-events: auto;
+  transition:
+    border-color 0.25s ease,
+    background-color 0.25s ease,
+    opacity 0.25s ease;
+}
+
+/* 위성 → 라벨 사이의 가는 선(위성 아래 10px 틈을 잇는다) */
+.journey-label-button::before {
+  content: "";
+  position: absolute;
+  left: calc(50% - var(--dx, 0px));
+  top: -9px;
+  width: 1px;
+  height: 8px;
+  background: linear-gradient(to bottom, rgba(228, 224, 244, 0), rgba(228, 224, 244, 0.55));
+}
+
+/* 라벨이 거의 보이지 않는 이동 구간(--lk < 0.5)에는 클릭을 받지 않는다. */
+.journey-stage:not([data-labels-on]) .journey-label-button {
+  pointer-events: none;
+}
+
+.journey-label-button:hover,
+.journey-label-button:focus-visible {
+  opacity: 1;
+  border-color: rgba(201, 184, 255, 0.35);
+}
+
+.journey-label-button[aria-current] {
+  opacity: 1;
+  padding: 4px 10px 5px;
+  border-color: rgba(201, 184, 255, 0.55);
+  background: rgba(14, 10, 36, 0.82);
+  color: #ffffff;
+  box-shadow:
+    0 0 0 1px rgba(145, 94, 255, 0.18),
+    0 6px 24px -6px rgba(145, 94, 255, 0.55);
+}
+
+.journey-label-button[aria-current]::before {
+  height: 9px;
+  background: linear-gradient(to bottom, rgba(201, 184, 255, 0.2), #c9b8ff);
+}
+
+.journey-label-title {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 15px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.journey-label-button[aria-current] .journey-label-title {
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 16px;
+}
+
+.journey-label-sub {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 10px;
+  line-height: 14px;
+  letter-spacing: 0.04em;
+  color: #a9a4c6;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/*
+ * 앞 위성 → 패널 가장자리 연결선. PlanetSystem이 transform(위치·각도·길이 scaleX)을 쓴다.
+ * 요소가 가로로 늘어나므로 끝점(동그라미)은 패널 영역의 기준점(.journey-panels::before)에 따로 그린다.
+ */
+.journey-connector {
+  position: absolute;
+  left: 0;
+  top: -0.5px;
+  width: 1px;
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    rgba(228, 224, 244, 0.15),
+    rgba(228, 224, 244, 0.85) 35%,
+    rgba(201, 184, 255, 0.9) 85%,
+    rgba(145, 94, 255, 0.4)
+  );
+  opacity: calc(var(--ck, 0) * 0.8);
+  transform-origin: 0 50%;
+}
+
+/*
+ * 행성 이름표: PlanetSystem이 transform(행성 아래 가장자리)과 --r(화면상 반지름)을 쓴다.
+ * 챕터 번호 + 제목의 캡션. 번호와 제목 사이는 가는 세로선.
+ */
+.journey-planet-tag {
+  position: absolute;
+  left: 0;
+  top: 0;
+  opacity: var(--lk, 0);
+}
+
+.journey-planet-tag-caption {
+  position: absolute;
+  left: 0;
+  top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  text-shadow: 0 2px 14px rgba(5, 4, 18, 0.95);
+}
+
+.journey-planet-tag-number {
+  padding-right: 10px;
+  border-right: 1px solid rgba(201, 184, 255, 0.45);
+  color: #c9b8ff;
+  font-size: 12px;
+  font-weight: 300;
+  line-height: 1;
+  letter-spacing: 0.1em;
+  font-variant-numeric: tabular-nums;
+}
+
+.journey-planet-tag-title {
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.06em;
+}
+
+/*
+ * 챕터 패널: 챕터마다 1개. 도착·위성 단계 내내 유지되고(--k), 안의 본문만 바뀐다.
+ * 본문들은 같은 격자 칸에 겹쳐 패널 크기가 항목마다 출렁이지 않는다(내부 스크롤 없음).
+ * 좁은 화면(768px 미만)은 위쪽이 행성·고리 전용이고 패널은 그 아래(--panel-top-narrow)에
+ * 위쪽 정렬한다(하단 여백은 MotionToggle 자리). 위치 상수는 JOURNEY_VIEWS와 같다.
+ */
+.journey-panels {
+  position: absolute;
+  top: calc(var(--panel-top-narrow, 0.4) * 100vh);
+  top: calc(var(--panel-top-narrow, 0.4) * 100svh);
+  bottom: 64px;
+  left: 16px;
+  right: 16px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  justify-items: center;
+}
+
+/* 연결선의 끝점: rig의 measureCardAnchor와 같은 자리(좁은 화면은 영역 위 가운데, 그 밖은 왼쪽 가운데). */
+.journey-panels::before {
+  content: "";
+  position: absolute;
+  z-index: 2;
+  left: 50%;
+  top: 0;
+  width: 7px;
+  height: 7px;
+  margin: -3.5px 0 0 -3.5px;
+  border-radius: 9999px;
+  background: #f4f2fb;
+  box-shadow:
+    0 0 0 3px rgba(145, 94, 255, 0.35),
+    0 0 14px rgba(201, 184, 255, 0.9);
+  opacity: var(--ck, 0);
+}
+
+/* 긴 목차·제목이 패널 폭을 밀어내지 않게 격자·flex 자식의 최소 폭을 0으로 둔다. */
+.journey-panel,
+.journey-panel-frame,
+.journey-panel-body,
+.journey-panel-stack,
+.journey-panel-content,
+.journey-panel-content > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.journey-panel-title,
+.journey-panel-desc,
+.journey-panel-content {
+  overflow-wrap: anywhere;
+}
+
+/*
+ * 패널 자체에는 opacity를 걸지 않고, --pk(패널 진행도)로 유리 바탕·테두리·안쪽 글자를
+ * 각각 페이드한다(머리의 글자들이 시차를 두고 나타나게 하려는 것).
+ */
+.journey-panel {
+  --pk: var(--k, 0);
+  grid-area: 1 / 1;
+  width: 100%;
+  max-width: 600px;
+  transform: translate3d(0, calc((1 - var(--pk)) * 18px), 0);
+}
+
+.journey-panel[data-active] {
+  pointer-events: auto;
+}
+
+/* 보이지 않는 챕터 패널은 통째로 숨긴다(안쪽의 transform 요소들이 레이어로 남지 않게).
+   다른 챕터의 내용은 목차·라벨·챕터 내비게이션으로 이동해 읽는다(탭 패널과 같은 방식). */
+.journey-panel:not([data-on]) {
+  visibility: hidden;
+}
+
+.journey-panel-frame {
+  position: relative;
+  z-index: 0;
+  border-radius: 22px;
+}
+
+/* 배경 흐림(backdrop-filter)은 쓰지 않는다. 매 프레임 바뀌는 WebGL 캔버스 위에서는
+   프레임당 약 3.5ms가 들었고(2740×1306 기준 실측), 바탕이 0.8 이상 불투명해 차이가 작다. */
+
+/* 유리 바탕 + 안쪽 빛. 뒤가 흰 빛이어도 보조 글자(#bdb8d8) 대비가 4.5:1 아래로 떨어지지 않는 불투명도(0.8~0.86). */
+.journey-panel-frame::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    radial-gradient(120% 60% at 0% 0%, rgba(145, 94, 255, 0.2), rgba(145, 94, 255, 0) 60%),
+    radial-gradient(80% 50% at 100% 100%, rgba(242, 114, 200, 0.09), rgba(242, 114, 200, 0) 65%),
+    linear-gradient(170deg, rgba(17, 13, 42, 0.8), rgba(7, 6, 21, 0.86));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 0 48px rgba(145, 94, 255, 0.08),
+    0 40px 90px -30px rgba(0, 0, 0, 0.75);
+  opacity: var(--pk);
+}
+
+/* 1px 그라디언트 테두리(가운데를 마스크로 뚫는다) */
+.journey-panel-frame::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  padding: 1px;
+  border-radius: inherit;
+  background: linear-gradient(
+    155deg,
+    rgba(214, 200, 255, 0.6),
+    rgba(255, 255, 255, 0.07) 32%,
+    rgba(255, 255, 255, 0.03) 64%,
+    rgba(242, 114, 200, 0.45)
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box exclude,
+    linear-gradient(#000 0 0);
+  opacity: var(--pk);
+  pointer-events: none;
+}
+
+.journey-panel-body {
+  padding: clamp(22px, 2.4vw, 36px) clamp(22px, 2.6vw, 40px) clamp(20px, 2.2vw, 32px);
+  color: #f4f2fb;
+}
+
+/*
+ * 시차 등장: 자식마다 시작 시점(--d)과 거리(--y)가 다르다. --e = (k − d) / (1 − d)를 0~1로 자른 값.
+ * 스크롤로 스크럽되므로 되돌리면 역재생된다. 머리는 --pk, 본문은 각 article의 --k를 쓴다.
+ */
+.journey-panel-head > * {
+  --e: clamp(0, (var(--pk) - var(--d, 0)) / (1 - var(--d, 0)), 1);
+  opacity: var(--e);
+  transform: translate3d(0, calc((1 - var(--e)) * var(--y, 12px)), 0);
+}
+
+.journey-panel-head > :nth-child(1) {
+  --d: 0;
+  --y: 28px;
+}
+
+.journey-panel-head > :nth-child(2) {
+  --d: 0.08;
+  --y: 14px;
+}
+
+.journey-panel-head > :nth-child(3) {
+  --d: 0.16;
+  --y: 22px;
+}
+
+.journey-panel-head > :nth-child(4) {
+  --d: 0.3;
+  --y: 16px;
+}
+
+/* 머리: 큰 챕터 번호(왼쪽, 두 줄 높이) + 소제목·제목, 그 아래 한 줄 설명 */
+.journey-panel-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: clamp(14px, 1.5vw, 22px);
+  align-items: end;
+}
+
+.journey-panel-number {
+  grid-row: 1 / 3;
+  align-self: stretch;
+  display: flex;
+  align-items: flex-end;
+  padding-right: clamp(14px, 1.5vw, 22px);
+  border-right: 1px solid rgba(201, 184, 255, 0.22);
+  color: #d9cfff;
+  font-size: clamp(46px, 4.4vw, 80px);
+  font-weight: 200;
+  line-height: 0.78;
+  letter-spacing: -0.05em;
+  font-variant-numeric: tabular-nums;
+}
+
+.journey-panel-sub {
+  grid-column: 2;
+  color: #c9b8ff;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+}
+
+.journey-panel-title {
+  grid-column: 2;
+  margin-top: 4px;
+  color: #ffffff;
+  font-size: clamp(30px, 2.4vw + 6px, 50px);
+  font-weight: 700;
+  line-height: 0.98;
+  letter-spacing: -0.03em;
+}
+
+.journey-panel-desc {
+  grid-column: 1 / -1;
+  max-width: 46ch;
+  margin-top: clamp(12px, 1.6vh, 18px);
+  color: #bdb8d8;
+  font-size: clamp(14px, 0.35vw + 10px, 15.5px);
+  line-height: 1.6;
+}
+
+/*
+ * stack = 목차 줄(1행) + 본문(2행). 큰 목차는 두 행을 모두 덮는다. 바깥 크기는 셋 중 큰 쪽으로 고정.
+ * --arrive: stack에 rig가 쓰는 --k(도착 1 → 첫 위성 진입 중 0). 본문 article은 자기 --k를 따로 받는다.
+ */
+.journey-panel-stack {
+  --arrive: var(--k, 1);
+  --se: clamp(0, (var(--pk) - 0.35) / 0.65, 1);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto 1fr;
+  margin-top: clamp(16px, 2.6vh, 28px);
+  opacity: var(--se);
+  transform: translate3d(0, calc((1 - var(--se)) * 20px), 0);
+}
+
+.journey-rail {
+  /* 큰 목차가 거의 빠진 뒤(도착 정도 0.35 아래)에 나타나 두 목록이 겹쳐 보이지 않게 한다. */
+  --re: clamp(0, (0.35 - var(--arrive)) / 0.35, 1);
+  grid-area: 1 / 1;
+  position: relative;
+  min-width: 0;
+  padding-bottom: 9px;
+  opacity: var(--re);
+  transform: translate3d(0, calc((1 - var(--re)) * -10px), 0);
+}
+
+/* 도착 단계에 키보드로 목차에 들어오면 목차 줄을 보인다. */
+.journey-rail:focus-within {
+  opacity: 1;
+}
+
+/* 진행 선: 회색 바탕 + 현재 위치까지 채움(--p = 현재 번호 / 개수, React가 쓴다) */
+.journey-rail::before,
+.journey-rail::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+}
+
+.journey-rail::before {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.journey-rail::after {
+  background: linear-gradient(90deg, #915eff, #f272c8);
+  box-shadow: 0 0 8px rgba(145, 94, 255, 0.8);
+  transform: scaleX(var(--p, 0));
+  transform-origin: 0 50%;
+  transition: transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.journey-toc {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 100%;
+  overflow-x: auto;
+  list-style: none;
+  scrollbar-width: none;
+}
+
+.journey-toc::-webkit-scrollbar {
+  display: none;
+}
+
+/* 목차 줄이 넘칠 때 오른쪽 끝을 흐리게 해 이어짐을 보인다. */
+.journey-toc[data-overflow] {
+  -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent);
+  mask-image: linear-gradient(90deg, #000 85%, transparent);
+}
+
+.journey-toc li {
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.journey-toc-button {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  max-width: 260px;
+  padding: 5px 8px;
+  border-radius: 7px;
+  color: #b3aed0;
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.journey-toc-number {
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 현재 항목만 제목을 펼친다. 나머지 제목은 화면에서만 숨기고 버튼 이름으로는 남긴다. */
+.journey-toc-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.journey-toc-button:not([aria-current]) .journey-toc-title {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.journey-toc-button[data-passed] {
+  color: #dcd8ee;
+}
+
+.journey-toc-button:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #ffffff;
+}
+
+.journey-toc-button[aria-current] {
+  background: rgba(145, 94, 255, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(201, 184, 255, 0.35);
+  color: #ffffff;
+}
+
+.journey-toc-button[aria-current] .journey-toc-number {
+  color: #c9b8ff;
+}
+
+.journey-toc-button[aria-current] .journey-toc-title {
+  font-weight: 600;
+}
+
+/*
+ * 도착 단계의 큰 세로 목차. 행마다 --i만큼 늦게 사라지고(아래 행부터), 목차 줄 쪽으로 올라가며 접힌다.
+ * 위성 단계(data-reading)에는 클릭을 받지 않는다.
+ */
+.journey-index {
+  grid-row: 1 / -1;
+  grid-column: 1;
+  align-self: start;
+  min-width: 0;
+}
+
+.journey-panel[data-reading] .journey-index {
+  pointer-events: none;
+}
+
+.journey-index-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  column-gap: clamp(16px, 2vw, 28px);
+  list-style: none;
+}
+
+.journey-index-list[data-columns] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(var(--half), auto);
+  grid-auto-flow: column;
+}
+
+.journey-index-list li {
+  /* 도착 정도 0.3 아래에서는 모두 사라져, 본문이 들어오기 전에 자리를 비운다. */
+  --ie: clamp(0, (var(--arrive) - 0.3) * 2.2 - var(--i) * 0.06, 1);
+  min-width: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.09);
+  opacity: var(--ie);
+  transform: translate3d(0, calc((var(--ie) - 1) * 18px), 0);
+}
+
+.journey-index-button {
+  display: grid;
+  grid-template-columns: 2.3em minmax(0, 1fr);
+  column-gap: 12px;
+  align-items: baseline;
+  width: 100%;
+  padding: clamp(8px, 1.15vh, 13px) 2px;
+  color: #f4f2fb;
+  text-align: left;
+}
+
+.journey-index-number {
+  grid-row: 1 / 3;
+  color: #8e89ad;
+  font-size: clamp(20px, 1.5vw + 2px, 28px);
+  font-weight: 200;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  transition: color 0.25s ease;
+}
+
+.journey-index-title {
+  overflow: hidden;
+  font-size: clamp(15px, 0.6vw + 8px, 19px);
+  font-weight: 500;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.journey-index-sub {
+  grid-column: 2;
+  overflow: hidden;
+  margin-top: 2px;
+  color: #a9a4c6;
+  font-size: 13px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.journey-index-button:hover .journey-index-number {
+  color: #c9b8ff;
+}
+
+.journey-index-button:hover .journey-index-title {
+  transform: translateX(4px);
+}
+
+.journey-hint {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: clamp(14px, 2vh, 22px);
+  color: #bdb8d8;
+  font-size: 13px;
+  line-height: 1.5;
+  opacity: clamp(0, var(--arrive) * 2 - 1, 1);
+}
+
+.journey-hint-line {
+  flex-shrink: 0;
+  width: 28px;
+  height: 1px;
+  background: linear-gradient(90deg, #915eff, rgba(145, 94, 255, 0));
+}
+
+.journey-panel-content {
+  grid-area: 2 / 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  padding-top: clamp(16px, 2.6vh, 26px);
+}
+
+/*
+ * 위성 본문. article의 --k 기본값 0은 패널·stack의 --k가 상속되지 않게 끊는 것이다(rig가 인라인으로 덮어쓴다).
+ * article은 빠르게 켜지고, 실제 등장은 직계 자식의 시차(--d, --y)로 보인다.
+ */
+.journey-panel-content > * {
+  grid-area: 1 / 1;
+  --k: 0;
+  opacity: clamp(0, var(--k) * 3, 1);
+}
+
+.journey-card > * {
+  --e: clamp(0, (var(--k) - var(--d, 0)) / (1 - var(--d, 0)), 1);
+  opacity: var(--e);
+}
+
+/* transform은 보이는 본문에만 건다(rig가 --k > 0인 요소에 data-on을 단다).
+   전부에 걸면 보이지 않는 본문의 자식 150여 개가 합성 레이어가 되어 스크롤이 끊긴다. */
+.journey-card[data-on] > * {
+  transform: translate3d(0, calc((1 - var(--e)) * var(--y, 12px)), 0);
+}
+
+.journey-card:not([data-on]) {
+  visibility: hidden;
+}
+
+.journey-card > :nth-child(1) {
+  --d: 0;
+  --y: 10px;
+}
+
+.journey-card > :nth-child(2) {
+  --d: 0.06;
+  --y: 22px;
+}
+
+.journey-card > :nth-child(3) {
+  --d: 0.14;
+  --y: 30px;
+}
+
+.journey-card > :nth-child(4) {
+  --d: 0.22;
+  --y: 36px;
+}
+
+.journey-card > :nth-child(5) {
+  --d: 0.3;
+  --y: 40px;
+}
+
+.journey-card > :nth-child(n + 6) {
+  --d: 0.36;
+  --y: 44px;
+}
+
+/* 본문 공통 타이포 */
+.journey-kicker {
+  color: #c9b8ff;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: 0.04em;
+}
+
+.journey-title {
+  margin-top: 6px;
+  color: #ffffff;
+  font-size: clamp(21px, 0.9vw + 10px, 26px);
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+}
+
+.journey-title-hero {
+  font-size: clamp(24px, 1.4vw + 10px, 34px);
+  font-weight: 600;
+  line-height: 1.12;
+  letter-spacing: -0.025em;
+}
+
+.journey-title-alt {
+  display: block;
+  margin-top: 4px;
+  color: #bdb8d8;
+  font-size: 0.56em;
+  font-weight: 300;
+  letter-spacing: 0.01em;
+}
+
+.journey-text {
+  color: #d9d5ea;
+  font-size: clamp(15px, 0.35vw + 11px, 17px);
+  font-weight: 400;
+  line-height: 1.7;
+}
+
+.journey-lead {
+  margin-top: 14px;
+  max-width: 52ch;
+}
+
+.journey-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+  list-style: none;
+}
+
+.journey-list-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  color: #ebe8f6;
+  font-size: clamp(14px, 0.3vw + 10.5px, 16px);
+  line-height: 1.6;
+}
+
+/* 목록 표식: 짧은 가로선 */
+.journey-bullet {
+  flex-shrink: 0;
+  width: 12px;
+  height: 1px;
+  margin-top: 0.8em;
+  background: linear-gradient(90deg, #c9b8ff, #915eff);
+}
+
+/* 소개: Focus 묶음은 상자 대신 왼쪽 세로선 */
+.journey-focus {
+  margin-top: 20px;
+  padding: 2px 0 2px 16px;
+  border-left: 1px solid rgba(201, 184, 255, 0.4);
+}
+
+.journey-focus-label {
+  color: #b3aed0;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.journey-focus-list {
+  display: grid;
+  gap: 4px;
+  margin-top: 8px;
+  list-style: none;
+  color: #f4f2fb;
+  font-size: clamp(15px, 0.4vw + 10px, 17px);
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+/* 서비스: 아이콘을 빛나는 원 안에 */
+.journey-glyph {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 9999px;
+  background: radial-gradient(circle at 35% 30%, rgba(201, 184, 255, 0.22), rgba(145, 94, 255, 0.06) 70%);
+  box-shadow:
+    inset 0 0 0 1px rgba(201, 184, 255, 0.25),
+    0 0 30px rgba(145, 94, 255, 0.25);
+}
+
+.journey-icon {
+  width: 60%;
+  height: 60%;
+  object-fit: contain;
+}
+
+.journey-card[data-kind="service"] .journey-title {
+  margin-top: 20px;
+}
+
+/* 경력: 아이콘 + 직함/회사, 기간, 성과 목록 */
+.journey-role {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.journey-role-text {
+  min-width: 0;
+}
+
+.journey-role .journey-title {
+  margin-top: 0;
+}
+
+.journey-icon-circle {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 9999px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+}
+
+.journey-icon-inner {
+  width: 58%;
+  height: 58%;
+  object-fit: contain;
+}
+
+.journey-company {
+  margin-top: 2px;
+  color: #c9b8ff;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.journey-date {
+  display: inline-flex;
+  margin-top: 16px;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+  color: #bdb8d8;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+  justify-self: start;
+  width: max-content;
+  max-width: 100%;
+}
+
+/* 기술 그리드: 유리 타일(아이콘 위, 이름 아래) */
+.journey-tech-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 18px;
+  list-style: none;
+}
+
+.journey-tech-grid li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px 6px 10px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  text-align: center;
+}
+
+.journey-tech-grid li span {
+  color: #ebe8f6;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.journey-tech-icon {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+}
+
+/* 스킬 묶음: 큰 이름 + 가는 테두리 알약 */
+.journey-skill-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 22px;
+  list-style: none;
+}
+
+.journey-skill-list li {
+  padding: 9px 16px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: inset 0 0 0 1px rgba(201, 184, 255, 0.28);
+  color: #f4f2fb;
+  font-size: clamp(14px, 0.3vw + 11px, 16px);
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+/* 프로젝트: 표지 이미지(Case Study 표시) → 이름(작게) → 부제(크게) → 설명 → 하이라이트 → 태그 */
+.journey-project-image {
+  position: relative;
+  height: 168px;
+  margin-bottom: 18px;
+  overflow: hidden;
+  border-radius: 14px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.journey-project-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.journey-project-image::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(9, 7, 26, 0.85), rgba(9, 7, 26, 0) 65%);
+}
+
+.journey-case-kicker {
+  position: absolute;
+  z-index: 1;
+  left: 12px;
+  bottom: 10px;
+  color: #f4f2fb;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.journey-project-title {
+  margin-top: 0;
+  color: #c9b8ff;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.journey-subtitle {
+  margin-top: 4px;
+  color: #ffffff;
+  font-size: clamp(19px, 0.8vw + 9px, 24px);
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+}
+
+.journey-card[data-kind="project"] .journey-text {
+  margin-top: 10px;
+}
+
+.journey-card[data-kind="project"] .journey-list {
+  margin-top: 12px;
+}
+
+.journey-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 14px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* 강점: 큰 얇은 번호 + 제목 + 선언문처럼 큰 설명 */
+.journey-strength-number {
+  color: rgba(201, 184, 255, 0.55);
+  font-size: clamp(40px, 2.6vw + 10px, 64px);
+  font-weight: 200;
+  line-height: 0.9;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+}
+
+.journey-card[data-kind="strength"] .journey-title {
+  margin-top: 12px;
+}
+
+.journey-statement {
+  margin-top: 16px;
+  max-width: 32ch;
+  color: #e4e0f4;
+  font-size: clamp(16px, 0.75vw + 10px, 22px);
+  font-weight: 300;
+  line-height: 1.65;
+}
+
+/* 좁은 화면(768px 미만): 현재 위성 라벨만(제목 1줄), 이름표는 행성 옆, 내비게이션은 가로 눈금 */
+@media (max-width: 767px) {
+  .journey-label:not([data-current]) {
+    display: none;
+  }
+
+  .journey-label-button {
+    max-width: 140px;
+  }
+
+  .journey-label-title,
+  .journey-label-button[aria-current] .journey-label-title {
+    -webkit-line-clamp: 1;
+  }
+
+  .journey-label-sub {
+    display: none;
+  }
+
+  /* 앞 위성이 행성 바로 아래에 오므로 이름표는 행성 왼쪽 옆에 둔다. */
+  .journey-planet-tag-caption {
+    top: calc(-1 * var(--r, 0px));
+    left: calc(-1 * var(--r, 0px) - 12px);
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6px;
+    transform: translate(-100%, -50%);
+  }
+
+  .journey-planet-tag-number {
+    padding-right: 0;
+    border-right: 0;
+  }
+}
+
+/* 768px 이상: 행성 왼쪽, 패널 오른쪽 세로 가운데. 내비게이션은 오른쪽 세로. */
+@media (min-width: 768px) {
+  .journey-stepper {
+    left: calc(var(--planet-x-mid, 0.24) * 100%);
+    bottom: var(--stepper-bottom-side, 28px);
+    transform: translateX(-50%);
+  }
+
+  .journey-dots {
+    top: 50%;
+    right: 20px;
+    transform: translateY(-50%);
+  }
+
+  .journey-dots ol {
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+  }
+
+  .journey-dot {
+    justify-content: flex-end;
+    padding: 5px 0 5px 6px;
+  }
+
+  .journey-dot-number {
+    display: block;
+    opacity: 0;
+    transition: opacity 0.25s ease;
+  }
+
+  .journey-dot[aria-current] .journey-dot-number,
+  .journey-dot:hover .journey-dot-number,
+  .journey-dot:focus-visible .journey-dot-number {
+    opacity: 1;
+  }
+
+  .journey-dot-tick {
+    width: 12px;
+  }
+
+  .journey-dot[aria-current] .journey-dot-tick {
+    width: 24px;
+  }
+
+  /* 현재 챕터 이름: 눈금 아래에 세로 글자로(패널과 겹치지 않게 폭을 쓰지 않는다) */
+  .journey-dots-caption {
+    display: block;
+    margin-top: 14px;
+    margin-right: 4px;
+    color: #bdb8d8;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.26em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    writing-mode: vertical-rl;
+  }
+
+  .journey-label-button {
+    max-width: 140px;
+  }
+
+  .journey-panels {
+    top: 104px;
+    bottom: 32px;
+    left: calc(var(--panel-left-mid, 0.5) * 100%);
+    right: 56px;
+    align-items: center;
+    justify-items: start;
+  }
+
+  .journey-panels::before {
+    left: 0;
+    top: 50%;
+    margin: -3.5px 0 0 -3.5px;
+  }
+
+  .journey-panel {
+    transform: translate3d(calc((1 - var(--pk)) * 28px), 0, 0);
+  }
+}
+
+/* 넓은 화면: 행성 가로 30%, 패널은 오른쪽(가로 54~92%). 패널 최대 폭을 넓힌다(영역 안에서). */
+@media (min-width: 1024px) {
+  .journey-stepper {
+    left: calc(var(--planet-x-wide, 0.3) * 100%);
+  }
+
+  .journey-dots {
+    right: 30px;
+  }
+
+  .journey-label-button {
+    max-width: 160px;
+  }
+
+  .journey-panels {
+    left: calc(var(--panel-left-wide, 0.54) * 100%);
+    right: 8%;
+  }
+
+  .journey-panel {
+    max-width: clamp(560px, 38vw, 720px);
+  }
+}
+
+/* 낮은 화면 압축(내용은 줄이지 않고 이미지·여백·글자 크기만 줄인다) */
+@media (max-height: 960px) {
+  .journey-project-image {
+    height: 112px;
+  }
+}
+
+/* 좁거나 낮은 화면: 이미지를 숨기고 촘촘하게 */
+@media (max-height: 760px), (max-width: 1023px) {
+  .journey-project-image {
+    display: none;
+  }
+
+  .journey-panel-body {
+    padding: 18px 20px 16px;
+  }
+
+  .journey-panel-number {
+    font-size: 44px;
+  }
+
+  .journey-panel-title {
+    font-size: 30px;
+  }
+
+  .journey-panel-desc {
+    margin-top: 10px;
+    font-size: 13px;
+    line-height: 1.55;
+  }
+
+  .journey-panel-stack {
+    margin-top: 14px;
+  }
+
+  .journey-panel-content {
+    padding-top: 14px;
+  }
+
+  .journey-title {
+    font-size: 19px;
+  }
+
+  .journey-title-hero {
+    font-size: 23px;
+  }
+
+  .journey-text {
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  .journey-lead {
+    margin-top: 10px;
+  }
+
+  .journey-list {
+    gap: 6px;
+    margin-top: 10px;
+  }
+
+  .journey-list-item {
+    font-size: 13.5px;
+    line-height: 1.55;
+  }
+
+  .journey-focus {
+    margin-top: 12px;
+  }
+
+  .journey-focus-list {
+    font-size: 14px;
+  }
+
+  .journey-glyph {
+    width: 48px;
+    height: 48px;
+  }
+
+  .journey-card[data-kind="service"] .journey-title {
+    margin-top: 12px;
+  }
+
+  .journey-icon-circle {
+    width: 44px;
+    height: 44px;
+  }
+
+  .journey-date {
+    margin-top: 10px;
+  }
+
+  /* 기술 그리드: 아이콘과 이름을 한 줄로 */
+  .journey-tech-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    margin-top: 12px;
+  }
+
+  .journey-tech-grid li {
+    flex-direction: row;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: 9px;
+    text-align: left;
+  }
+
+  .journey-tech-grid li span {
+    font-size: 11.5px;
+  }
+
+  .journey-tech-icon {
+    width: 18px;
+    height: 18px;
+  }
+
+  .journey-skill-list {
+    gap: 8px;
+    margin-top: 14px;
+  }
+
+  .journey-skill-list li {
+    padding: 7px 13px;
+    font-size: 14px;
+  }
+
+  .journey-subtitle {
+    font-size: 18px;
+  }
+
+  .journey-strength-number {
+    font-size: 40px;
+  }
+
+  .journey-statement {
+    margin-top: 10px;
+    font-size: 16px;
+  }
+
+  .journey-index-button {
+    padding: 8px 2px;
+  }
+
+  .journey-index-number {
+    font-size: 20px;
+  }
+
+  .journey-index-title {
+    font-size: 15px;
+  }
+
+  .journey-index-sub {
+    font-size: 12px;
+  }
+
+  .journey-hint {
+    margin-top: 12px;
+  }
+}
+
+@media (max-width: 639px) {
+  .journey-panel-frame {
+    border-radius: 18px;
+  }
+
+  .journey-panel-body {
+    padding: 16px 16px 14px;
+  }
+
+  .journey-panel-number {
+    font-size: 38px;
+  }
+
+  .journey-panel-title {
+    font-size: 25px;
+  }
+
+  .journey-panel-sub {
+    font-size: 11px;
+    letter-spacing: 0.2em;
+  }
+
+  .journey-text {
+    font-size: 13.5px;
+    line-height: 1.55;
+  }
+
+  .journey-title-hero {
+    font-size: 21px;
+  }
+
+  .journey-subtitle {
+    font-size: 16px;
+  }
+
+  .journey-index-sub {
+    display: none;
+  }
+
+  .journey-index-button {
+    grid-template-columns: 2em minmax(0, 1fr);
+    column-gap: 8px;
+    padding: 7px 0;
+  }
+
+  .journey-index-number {
+    grid-row: auto;
+    font-size: 16px;
+  }
+
+  .journey-index-title {
+    font-size: 13.5px;
+  }
+}
+
+/*
+ * 낮은 화면(높이 700px 이하, 1024px 미만): 패널 머리를 한 줄(번호 + 제목 + 소제목)로,
+ * 설명은 한 줄 말줄임으로 줄인다(전체 문장은 title 속성).
+ */
+@media (max-width: 1023px) and (max-height: 700px) {
+  .journey-panel-head {
+    grid-template-columns: auto auto minmax(0, 1fr);
+    align-items: baseline;
+    column-gap: 10px;
+  }
+
+  .journey-panel-number {
+    grid-row: 1;
+    grid-column: 1;
+    align-self: baseline;
+    padding-right: 10px;
+    font-size: 26px;
+    line-height: 1;
+  }
+
+  .journey-panel-title {
+    grid-row: 1;
+    grid-column: 2;
+    margin-top: 0;
+    font-size: 22px;
+  }
+
+  .journey-panel-sub {
+    grid-row: 1;
+    grid-column: 3;
+    overflow: hidden;
+    font-size: 10.5px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .journey-panel-desc {
+    margin-top: 6px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .journey-panel-body {
+    padding-top: 12px;
+    padding-bottom: 10px;
+  }
+
+  .journey-panel-stack {
+    margin-top: 8px;
+  }
+
+  .journey-toc-button {
+    padding: 3px 7px;
+    font-size: 11px;
+  }
+
+  .journey-rail {
+    padding-bottom: 6px;
+  }
+
+  .journey-panel-content {
+    padding-top: 10px;
+  }
+
+  .journey-text {
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .journey-title {
+    margin-top: 2px;
+    font-size: 17px;
+  }
+
+  .journey-title-hero {
+    font-size: 19px;
+  }
+
+  .journey-title-alt {
+    display: inline;
+    margin-left: 8px;
+  }
+
+  .journey-lead {
+    margin-top: 6px;
+  }
+
+  .journey-list {
+    gap: 3px;
+    margin-top: 6px;
+  }
+
+  .journey-list-item {
+    font-size: 12.5px;
+    line-height: 1.45;
+  }
+
+  .journey-focus {
+    margin-top: 8px;
+    padding-left: 12px;
+  }
+
+  .journey-focus-list {
+    margin-top: 4px;
+    font-size: 13px;
+  }
+
+  .journey-glyph {
+    width: 40px;
+    height: 40px;
+  }
+
+  .journey-icon-circle {
+    width: 38px;
+    height: 38px;
+  }
+
+  .journey-date {
+    margin-top: 6px;
+  }
+
+  .journey-tech-grid {
+    gap: 4px;
+    margin-top: 8px;
+  }
+
+  .journey-tech-grid li {
+    gap: 6px;
+    padding: 4px 6px;
+  }
+
+  .journey-tech-grid li span {
+    font-size: 11px;
+    line-height: 14px;
+  }
+
+  .journey-tech-icon {
+    width: 16px;
+    height: 16px;
+  }
+
+  .journey-skill-list {
+    margin-top: 10px;
+  }
+
+  .journey-skill-list li {
+    padding: 5px 11px;
+    font-size: 13px;
+  }
+
+  .journey-subtitle {
+    font-size: 15px;
+    line-height: 1.3;
+  }
+
+  .journey-card[data-kind="project"] .journey-text {
+    margin-top: 6px;
+  }
+
+  .journey-card[data-kind="project"] .journey-list {
+    margin-top: 6px;
+  }
+
+  .journey-tags {
+    margin-top: 8px;
+    column-gap: 8px;
+    font-size: 12px;
+  }
+
+  .journey-strength-number {
+    font-size: 30px;
+  }
+
+  .journey-card[data-kind="strength"] .journey-title {
+    margin-top: 6px;
+  }
+
+  .journey-statement {
+    font-size: 14.5px;
+  }
+
+  .journey-index-button {
+    padding: 5px 0;
+  }
+
+  .journey-hint {
+    margin-top: 8px;
+    font-size: 12px;
+  }
+}
+
+/* 가장 작은 화면(360×640 등): 가장 긴 본문(프로젝트)이 영역에 들어가도록 한 단계 더 줄인다. */
+@media (max-width: 639px) and (max-height: 700px) {
+  .journey-text {
+    font-size: 12.5px;
+    line-height: 1.5;
+  }
+
+  .journey-list-item {
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .journey-panel-content {
+    padding-top: 8px;
+  }
+
+  .journey-subtitle {
+    font-size: 14px;
+  }
+}
+
+/*
+ * UX 보강: 챕터 인터스티셜, 목적지 표시, 조작 안내, 패널 아래 이전·다음 줄, 챕터 내비게이션 이름, 넘기기 버튼 모양.
+ * 규칙: 보이지 않는 요소에는 transform을 걸지 않는다([data-on]일 때만). 배경 흐림은 쓰지 않는다.
+ */
+
+/*
+ * 이동 구간의 챕터 인터스티셜. --k·data-on은 rig가 이동 진행도로 쓴다(나타났다가 도착 전에 사라짐).
+ * 화면 정가운데에 둔다(사용자 요청). 뒤의 은하 위에서도 읽히도록 카드 뒤에 어두운 방사형 바탕을 깐다.
+ */
+.journey-titles {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  justify-items: center;
+  padding: 0 20px;
+}
+
+.journey-title-card {
+  position: relative;
+  grid-area: 1 / 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 100%;
+  text-align: center;
+  opacity: var(--k, 0);
+  /* 뒤의 어두운 바탕(::before, z-index -1)이 불투명도 1일 때도 카드 안에 머물게 한다. */
+  isolation: isolate;
+}
+
+.journey-title-card::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: -22% -16%;
+  background: radial-gradient(
+    closest-side,
+    rgba(1, 3, 10, 0.72),
+    rgba(1, 3, 10, 0.4) 55%,
+    rgba(1, 3, 10, 0)
+  );
+  pointer-events: none;
+}
+
+.journey-title-card:not([data-on]) {
+  visibility: hidden;
+}
+
+.journey-title-card[data-on] > * {
+  transform: translate3d(0, calc((1 - var(--k, 0)) * var(--y, 16px)), 0);
+}
+
+.journey-title-card > :nth-child(1) {
+  --y: 10px;
+}
+
+.journey-title-card > :nth-child(2) {
+  --y: 34px;
+}
+
+.journey-title-card > :nth-child(3) {
+  --y: 22px;
+}
+
+.journey-title-count {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: #b3aed0;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.2em;
+  font-variant-numeric: tabular-nums;
+}
+
+.journey-title-number {
+  color: #ffffff;
+}
+
+.journey-title-rule {
+  width: 64px;
+  height: 1px;
+  background: linear-gradient(90deg, #915eff, #f272c8);
+}
+
+.journey-title-name {
+  max-width: 100%;
+  margin-top: 18px;
+  overflow-wrap: anywhere;
+  color: #f4f2fb;
+  font-size: clamp(46px, 7.4vw, 124px);
+  font-weight: 700;
+  line-height: 0.95;
+  letter-spacing: -0.045em;
+  text-shadow: 0 8px 60px rgba(5, 8, 22, 0.9);
+}
+
+.journey-title-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 8px 18px;
+  margin-top: 22px;
+  color: #c9b8ff;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+}
+
+.journey-title-satellites {
+  padding-left: 18px;
+  border-left: 1px solid rgba(255, 255, 255, 0.22);
+  color: #e4e0f4;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+}
+
+/*
+ * 행성 이름표의 이동 중 모습(data-journey-phase="travel", rig가 쓴다): 목적지 표시.
+ * 화면 가운데의 챕터 제목이 목적지 이름을 알려 주므로 이름표 글자는 숨기고,
+ * 행성 둘레 점선 원(--r = 행성의 화면 반지름, PlanetSystem이 쓴다)만 남긴다.
+ */
+.journey-planet-tag-ring {
+  display: none;
+}
+
+.journey-stage[data-journey-phase="travel"] .journey-planet-tag {
+  opacity: 1;
+}
+
+.journey-stage[data-journey-phase="travel"] .journey-planet-tag-caption {
+  display: none;
+}
+
+.journey-stage[data-journey-phase="travel"] .journey-planet-tag-ring {
+  --ring: calc(max(var(--r, 0px), 10px) + 9px);
+  display: block;
+  position: absolute;
+  left: calc(-1 * var(--ring));
+  top: calc(-1 * var(--r, 0px) - var(--ring));
+  width: calc(2 * var(--ring));
+  height: calc(2 * var(--ring));
+  border: 1px dashed rgba(201, 184, 255, 0.7);
+  border-radius: 9999px;
+  box-shadow: 0 0 24px rgba(145, 94, 255, 0.25);
+}
+
+/* 첫 도착 때 한 번 뜨는 조작 안내. 시간 기반 페이드(사용자 조작에 대한 응답)라 transition을 쓴다. */
+.journey-guide {
+  position: absolute;
+  z-index: 6;
+  left: 16px;
+  right: 16px;
+  bottom: calc(64px + 12px);
+  display: flex;
+  justify-content: center;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity 0.4s ease,
+    visibility 0s linear 0.4s;
+}
+
+.journey-guide[data-show] {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.6s ease 0.4s;
+}
+
+.journey-guide-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 9px 16px;
+  border-radius: 9999px;
+  background: rgba(13, 10, 34, 0.9);
+  box-shadow:
+    inset 0 0 0 1px rgba(201, 184, 255, 0.32),
+    0 18px 40px -18px rgba(0, 0, 0, 0.9);
+  color: #e4e0f4;
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.journey-guide-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.journey-guide-item + .journey-guide-item {
+  padding-left: 14px;
+  border-left: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.journey-guide-mouse {
+  width: 12px;
+  height: 15px;
+  fill: none;
+  stroke: #c9b8ff;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+}
+
+.journey-guide-keys kbd {
+  min-width: 20px;
+  padding: 2px 5px;
+  border-radius: 5px;
+  box-shadow: inset 0 0 0 1px rgba(201, 184, 255, 0.4);
+  color: #f4f2fb;
+  font-family: inherit;
+  font-size: 10.5px;
+  line-height: 14px;
+  text-align: center;
+}
+
+.journey-guide-button {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 9999px;
+  box-shadow: inset 0 0 0 1px rgba(201, 184, 255, 0.45);
+}
+
+.journey-guide-button svg {
+  width: 11px;
+  height: 11px;
+  fill: none;
+  stroke: #f4f2fb;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+@media (hover: none) {
+  .journey-guide-keys {
+    display: none;
+  }
+}
+
+/* 패널 아래 이전·다음 줄. 패널 글자와 같이 --pk로 나타난다. */
+.journey-foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: clamp(14px, 2.2vh, 22px);
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  opacity: clamp(0, (var(--pk, 0) - 0.5) / 0.5, 1);
+}
+
+.journey-foot-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 36px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  color: #b3aed0;
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.journey-foot-previous {
+  flex: 0 1 auto;
+  max-width: 40%;
+  margin-left: -8px;
+}
+
+.journey-foot-next {
+  flex: 0 1 auto;
+  max-width: 62%;
+  margin-left: auto;
+  margin-right: -8px;
+  color: #f4f2fb;
+  font-weight: 500;
+}
+
+.journey-foot-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.journey-foot-label {
+  flex-shrink: 0;
+  color: #c9b8ff;
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+}
+
+.journey-foot-icon {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+}
+
+.journey-foot-button:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #ffffff;
+}
+
+/* 다음이 새 행성(챕터)이면 강조 */
+.journey-foot-next[data-chapter] {
+  padding: 4px 10px 4px 12px;
+  margin-right: 0;
+  box-shadow: inset 0 0 0 1px rgba(201, 184, 255, 0.4);
+  background: rgba(145, 94, 255, 0.12);
+}
+
+/* 챕터 내비게이션: 터치 대상 44px, 호버·포커스 시 이름 */
+.journey-dot {
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+}
+
+.journey-dot-name {
+  display: none;
+}
+
+/* 넘기기 버튼: 패널과 같은 유리 톤(크기·위치는 JOURNEY_STEPPER 그대로) */
+.journey-step {
+  border-color: rgba(201, 184, 255, 0.28);
+  background: rgba(13, 10, 34, 0.86);
+  box-shadow: 0 10px 30px -14px rgba(0, 0, 0, 0.9);
+}
+
+.journey-step:hover {
+  border-color: rgba(201, 184, 255, 0.7);
+  background: rgba(30, 22, 66, 0.92);
+  box-shadow: 0 0 22px -4px rgba(145, 94, 255, 0.55);
+}
+
+.journey-step-count {
+  color: #b3aed0;
+}
+
+.journey-step-hint kbd {
+  border-color: rgba(201, 184, 255, 0.24);
+  color: #b3aed0;
+}
+
+@media (max-width: 767px) {
+  .journey-foot {
+    display: none;
+  }
+
+  .journey-dots ol {
+    gap: 0;
+  }
+}
+
+@media (min-width: 768px) {
+  .journey-guide {
+    left: calc(var(--planet-x-mid, 0.24) * 100% - 200px);
+    right: auto;
+    width: 400px;
+    bottom: calc(var(--stepper-bottom-side, 28px) + var(--stepper-height, 44px) + 16px);
+  }
+
+  .journey-dots ol {
+    gap: 0;
+  }
+
+  .journey-dot {
+    justify-content: flex-end;
+    padding: 0;
+  }
+
+  .journey-dot-name {
+    display: block;
+    position: absolute;
+    right: calc(100% + 6px);
+    top: 50%;
+    margin-top: -12px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    background: rgba(13, 10, 34, 0.94);
+    box-shadow: inset 0 0 0 1px rgba(201, 184, 255, 0.32);
+    color: #f4f2fb;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 16px;
+    white-space: nowrap;
+    opacity: 0;
+    visibility: hidden;
+    transition:
+      opacity 0.2s ease,
+      visibility 0s linear 0.2s;
+  }
+
+  .journey-dot:hover .journey-dot-name,
+  .journey-dot:focus-visible .journey-dot-name {
+    opacity: 1;
+    visibility: visible;
+    transition: opacity 0.2s ease;
+  }
+}
+
+/* 중간 폭(768~1023px): 라벨이 행성 주변에 몰리므로 현재 위성 라벨만 */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .journey-label:not([data-current]) {
+    display: none;
+  }
+}
+
+@media (min-width: 1024px) {
+  .journey-guide {
+    left: calc(var(--planet-x-wide, 0.3) * 100% - 200px);
+  }
+}
+
+/* 낮은 화면(1024px 미만, 높이 700px 이하): 이전·다음 줄을 촘촘하게 */
+@media (max-width: 1023px) and (max-height: 700px) {
+  .journey-foot {
+    margin-top: 8px;
+    padding-top: 6px;
+  }
+
+  .journey-foot-button {
+    min-height: 30px;
+    padding: 2px 6px;
+    font-size: 12px;
+  }
+
+  .journey-foot-label {
+    font-size: 11px;
+  }
+}
+
+/*
+ * Navbar: 현재 챕터 링크(aria-current)와 아래 얇은 전체 진행 선.
+ * 진행 선의 transform(scaleX)은 rig가 값이 바뀔 때만 쓴다. 항해가 꺼지면 숨긴다.
+ */
+.nav-link {
+  position: relative;
+}
+
+.nav-link[aria-current] {
+  color: #ffffff;
+}
+
+.nav-link[aria-current]::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -7px;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #915eff, #f272c8);
+}
+
+.nav-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #915eff, #c9b8ff 60%, #f272c8);
+  box-shadow: 0 0 10px rgba(145, 94, 255, 0.6);
+  transform: scaleX(0);
+  transform-origin: left center;
+  pointer-events: none;
+}
+
+.nav-progress:not([data-on]) {
+  visibility: hidden;
+}
+
+/*
+ * Contact: 항해의 마지막 장면. 넓은 화면은 패널이 왼쪽 46%, 오른쪽은 은하가 보이게 비운다.
+ * 패널은 항해 패널과 같은 유리 톤(바탕 0.8 이상 불투명, 1px 그라디언트 테두리).
+ */
+.contact-layout {
+  display: flex;
+}
+
+.contact-panel {
+  position: relative;
+  z-index: 0;
+  width: 100%;
+  padding: clamp(24px, 3vw, 44px);
+  border-radius: 24px;
+  color: #f4f2fb;
+}
+
+.contact-panel::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    radial-gradient(120% 50% at 0% 0%, rgba(145, 94, 255, 0.2), rgba(145, 94, 255, 0) 60%),
+    radial-gradient(80% 40% at 100% 100%, rgba(242, 114, 200, 0.08), rgba(242, 114, 200, 0) 65%),
+    linear-gradient(170deg, rgba(17, 13, 42, 0.84), rgba(7, 6, 21, 0.9));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 40px 90px -30px rgba(0, 0, 0, 0.75);
+}
+
+.contact-panel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  padding: 1px;
+  border-radius: inherit;
+  background: linear-gradient(
+    155deg,
+    rgba(214, 200, 255, 0.6),
+    rgba(255, 255, 255, 0.07) 32%,
+    rgba(255, 255, 255, 0.03) 64%,
+    rgba(242, 114, 200, 0.45)
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box exclude,
+    linear-gradient(#000 0 0);
+  pointer-events: none;
+}
+
+.contact-sub {
+  color: #c9b8ff;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+}
+
+.contact-title {
+  margin-top: 6px;
+  color: #ffffff;
+  font-size: clamp(40px, 4vw, 60px);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.035em;
+}
+
+.contact-lead {
+  max-width: 44ch;
+  margin-top: 16px;
+  color: #bdb8d8;
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+.contact-links {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  margin-top: 28px;
+  list-style: none;
+}
+
+.contact-link {
+  display: block;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.contact-link:hover {
+  background: rgba(145, 94, 255, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(201, 184, 255, 0.45);
+}
+
+.contact-link-label {
+  color: #c9b8ff;
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.contact-link-value {
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+  color: #f4f2fb;
+  font-size: 14.5px;
+}
+
+.contact-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-top: 32px;
+  padding-top: 28px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.contact-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.contact-field-label {
+  color: #e4e0f4;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.contact-input {
+  width: 100%;
+  padding: 13px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  outline: none;
+  background: rgba(5, 4, 18, 0.55);
+  color: #f4f2fb;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.contact-input::placeholder {
+  color: #8e89ad;
+}
+
+.contact-input:focus {
+  border-color: #c9b8ff;
+  box-shadow: 0 0 0 3px rgba(145, 94, 255, 0.28);
+}
+
+textarea.contact-input {
+  resize: none;
+}
+
+.contact-submit {
+  align-self: flex-start;
+  min-height: 46px;
+  padding: 12px 28px;
+  border-radius: 9999px;
+  background: #f4f2fb;
+  color: #0d0a24;
+  font-size: 15px;
+  font-weight: 600;
+  box-shadow: 0 10px 30px -10px rgba(145, 94, 255, 0.6);
+}
+
+.contact-submit:hover:not(:disabled) {
+  background: #ffffff;
+  box-shadow: 0 10px 34px -8px rgba(145, 94, 255, 0.85);
+}
+
+.contact-submit:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.contact-message {
+  font-size: 14px;
+}
+
+@media (min-width: 640px) {
+  .contact-links {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .contact-panel {
+    width: 46%;
+    min-width: 520px;
+  }
+}
+
+/* Footer: 은하 위의 가는 선 하나와 작은 글자 */
+.site-footer {
+  position: relative;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(5, 8, 22, 0), rgba(5, 8, 22, 0.85));
+  color: #f4f2fb;
+}
+
+.site-footer-name {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.site-footer-note {
+  margin-top: 4px;
+  color: #b3aed0;
+  font-size: 13px;
+}
+
+.site-footer-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 9999px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+  color: #e4e0f4;
+}
+
+.site-footer-link:hover {
+  box-shadow: inset 0 0 0 1px rgba(201, 184, 255, 0.6);
+  color: #c9b8ff;
 }
