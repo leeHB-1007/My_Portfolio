@@ -13,6 +13,7 @@ import {
   stepDuration,
   stopAt,
   WHEEL_GESTURE,
+  inAutoScrollZone,
   wheelGestureStep,
 } from "./stepMotion";
 
@@ -268,5 +269,24 @@ describe("휠 제스처 넘기기", () => {
   it("방향을 바꾸면 바로 넘긴다", () => {
     expect(wheelGestureStep({ dir: 1, delta: 30 }, -1, 30, 16)).toBe(-1);
     expect(wheelGestureStep({ dir: -1, delta: 30 }, 1, 30, 16)).toBe(1);
+  });
+});
+
+describe("자동 넘기기 구간", () => {
+  const start = 0;
+  const end = 5000;
+
+  it("Hero 인트로부터 Contact 위 끝 사이는 양방향 모두 자동 넘기기다", () => {
+    expect(inAutoScrollZone(0, 1, start, end)).toBe(true);
+    expect(inAutoScrollZone(1200, 1, start, end)).toBe(true);
+    expect(inAutoScrollZone(1200, -1, start, end)).toBe(true);
+    expect(inAutoScrollZone(end, -1, start, end)).toBe(true);
+  });
+
+  it("Hero 맨 위에서 위로, Contact부터 아래로는 네이티브 스크롤이다", () => {
+    expect(inAutoScrollZone(0, -1, start, end)).toBe(false);
+    expect(inAutoScrollZone(end, 1, start, end)).toBe(false);
+    expect(inAutoScrollZone(end + 300, -1, start, end)).toBe(false);
+    expect(inAutoScrollZone(end + 300, 1, start, end)).toBe(false);
   });
 });

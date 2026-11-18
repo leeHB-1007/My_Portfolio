@@ -6,7 +6,7 @@
 export const STEP_TIMING = {
   item: 1.3,
   chapter: 3.2,
-  edge: 2.6,
+  edge: 3.2,
   perUnit: 1.8,
   max: 3.4,
   // 같은 방향으로 미리 쌓아 둘 수 있는 칸 수(현재 위치 기준). 키를 누르고 있어도 멀리 달아나지 않게 한다.
@@ -19,6 +19,12 @@ export const STEP_TIMING = {
 // - 입력 세기(|deltaY|)가 직전보다 rise배 넘게 커졌다(관성은 줄어들기만 하므로 다시 커지면 새로 민 것).
 // - 방향이 바뀌었다.
 export const WHEEL_GESTURE = { gapMs: 120, rise: 1.4, minDelta: 4 };
+
+// 휠을 자동 넘기기로 바꾸는 구간(start: Hero 맨 위, end: Contact 위 끝)인지. 양 끝에서 바깥쪽으로 가는
+// 휠(Hero 맨 위에서 위로, Contact에서 아래로)은 넘길 곳이 없으므로 네이티브 스크롤에 맡긴다.
+// edge(px): 양 끝으로 보는 여유(반올림 오차)
+export const inAutoScrollZone = (position, direction, start, end, edge = 1) =>
+  direction > 0 ? position >= start - edge && position < end - edge : position > start + edge && position <= end + edge;
 
 // 휠 입력 하나로 넘길 방향(0이면 넘기지 않는다).
 // last: { dir(이번 제스처로 이미 넘긴 방향, 없으면 0), delta(직전 입력의 |deltaY|) }
