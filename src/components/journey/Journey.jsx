@@ -10,6 +10,7 @@ import {
   stopIndexOf,
 } from "../../scroll/journeyPose";
 import { attachJourney, rig, stepJourney } from "../../scroll/scrollRig";
+import { track } from "../../analytics";
 import { STEP_KEY_REPEAT_MS } from "../../scroll/stepMotion";
 import JourneyGuide from "./JourneyGuide";
 import JourneyLabels from "./JourneyLabels";
@@ -114,6 +115,29 @@ const Journey = () => {
     };
     sync(rig);
     return rig.subscribe(sync);
+  }, []);
+
+  // 사용 분석: 챕터에 처음 도착했을 때와 트랙 끝을 지났을 때를 페이지마다 한 번씩 기록한다.
+  useEffect(() => {
+    const reached = new Set();
+    let completed = false;
+    const report = (state) => {
+      const journey = state.journey;
+      if (!journey || !journey.measured) return;
+      if (journey.phase !== "travel" && !reached.has(journey.index)) {
+        reached.add(journey.index);
+        track("journey_chapter_reached", {
+          chapter: journey.index + 1,
+          id: journeyChapters[journey.index].id,
+        });
+      }
+      if (journey.past && !completed) {
+        completed = true;
+        track("journey_completed");
+      }
+    };
+    report(rig);
+    return rig.subscribe(report);
   }, []);
 
   const chapter = journeyChapters[view.index];

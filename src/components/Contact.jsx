@@ -2,6 +2,7 @@ import React, { useRef, useState } from "react";
 import { motion } from "framer-motion";
 
 import useContactStore from "../store/contractStore";
+import { track } from "../analytics";
 import { profileLinks } from "../constants";
 import { SectionWrapper } from "../hoc";
 import { slideIn } from "../utils/motion";
@@ -30,8 +31,10 @@ const Contact = () => {
     try {
       await submitContactForm();
       setSuccessMessage("메시지를 전송했습니다. 곧 답장드리겠습니다.");
+      track("contact_form_submitted", { result: "success" });
     } catch (error) {
       void error;
+      track("contact_form_submitted", { result: "error" });
     }
   };
 
@@ -53,6 +56,7 @@ const Contact = () => {
                 href={link.href}
                 target={link.href.startsWith("mailto:") ? undefined : "_blank"}
                 rel={link.href.startsWith("mailto:") ? undefined : "noopener noreferrer"}
+                onClick={() => track("contact_link_clicked", { channel: link.label, location: "contact" })}
                 className="contact-link"
               >
                 <p className="contact-link-label">{link.label}</p>

@@ -1,5 +1,7 @@
 import React, { Suspense, lazy, useEffect, useRef, useSyncExternalStore } from "react";
 import { BrowserRouter } from "react-router-dom";
+import { Analytics } from "@vercel/analytics/react";
+import { SpeedInsights } from "@vercel/speed-insights/react";
 
 import Navbar from "./components/Navbar";
 import Hero from "./components/Hero";
@@ -87,6 +89,9 @@ const App = () => {
           <Footer />
         </Suspense>
       </div>
+      {/* Vercel 배포에서만 방문·성능(Core Web Vitals) 데이터를 보낸다. 대시보드에서 켜야 수집된다. */}
+      <Analytics />
+      <SpeedInsights />
     </BrowserRouter>
   );
 };
