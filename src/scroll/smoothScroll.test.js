@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import { SMOOTH_SCROLL, followScroll, restScroll, shouldJumpScroll } from "./smoothScroll";
-import { addPending, drainPending } from "./wheelLimit";
 
 const run = (state, target, seconds, dt = 1 / 60) => {
   let next = state;
@@ -26,25 +25,7 @@ describe("followScroll", () => {
     expect(second.velocity).toBeLessThanOrEqual((100 * omega) / Math.E + 1e-9);
   });
 
-  it("항해 구간(휠 속도 상한을 거친 입력)에서는 휠 칸마다 속도가 크게 맥동하지 않는다", () => {
-    const vh = 900;
-    let state = restScroll(0);
-    let raw = 0;
-    let pending = 0;
-    const speeds = [];
-    for (let frame = 0; frame < 36; frame += 1) {
-      if (frame % 6 === 0) pending = addPending(pending, 100, vh);
-      const step = drainPending(pending, 1 / 60, vh);
-      pending = step.pending;
-      raw += step.move;
-      state = followScroll(state, raw, 1 / 60);
-      if (frame >= 18) speeds.push(state.velocity);
-    }
-    // 이전 1차 지수 보간은 같은 입력에서 약 2배로 맥동했다.
-    expect(Math.max(...speeds) / Math.min(...speeds)).toBeLessThan(1.7);
-  });
-
-  // 트랙 밖에서는 브라우저가 휠을 자체적으로 부드럽게 스크롤하므로 이렇게 계단처럼 들어오는 경우는 드물다.
+  // 브라우저는 보통 휠을 자체적으로 부드럽게 스크롤하므로 이렇게 계단처럼 들어오는 경우는 드물다.
   it("휠 칸마다 속도가 0까지 떨어지지 않고 이어진다(상한 없는 계단 입력)", () => {
     let state = restScroll(0);
     let target = 0;
